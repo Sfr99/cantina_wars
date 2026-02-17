@@ -1,0 +1,3 @@
+C:/Users/javie/Documents/p2_vg/build/CMakeFiles/cantina_wars.dir
+C:/Users/javie/Documents/p2_vg/build/CMakeFiles/edit_cache.dir
+C:/Users/javie/Documents/p2_vg/build/CMakeFiles/rebuild_cache.dir
