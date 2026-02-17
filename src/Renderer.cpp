@@ -62,7 +62,6 @@ bool Renderer::init() {
     }
     SDL_SetRenderDrawBlendMode(sdlRend, SDL_BLENDMODE_BLEND);
 
-    // Fondo
     SDL_Surface* tempSurface = IMG_Load("../assets/space.png");
     if (!tempSurface) {
         printf("No se pudo cargar space.png: %s\n", IMG_GetError());
@@ -78,7 +77,7 @@ bool Renderer::init() {
             SDL_FreeSurface(tempSurface);
         }
     }
-
+    generateStars(300);
     // Si tu zbuf depende de tamaño, asegúrate de que está dimensionado
     // (si ya lo haces en el .hpp/ctor, esto no hace daño)
     if ((int)zbuf.size() != W * H) zbuf.assign(W * H, 1e9f);
@@ -86,18 +85,39 @@ bool Renderer::init() {
     return true;
 }
 
-void Renderer::clear() {
+void Renderer::generateStars(int count) {
+    stars.clear();
+    for (int i = 0; i < count; i++) {
+        stars.push_back({
+            (float)(rand() % W),
+            (float)(rand() % H),
+            (Uint8)(100 + rand() % 155)
+        });
+    }
+}
+
+void Renderer::drawStars() {
+    for (const auto& s : stars) {
+        SDL_SetRenderDrawColor(sdlRend, s.brightness, s.brightness, s.brightness, 255);
+        SDL_RenderDrawPoint(sdlRend, (int)s.x, (int)s.y);
+    }
+}
+
+void Renderer::clear(bool hdMode) {
     // Limpia color
     SDL_SetRenderDrawColor(sdlRend, 0, 0, 0, 255);
     SDL_RenderClear(sdlRend);
 
     // Dibuja fondo (si existe)
-    if (backgroundTexture) {
+    if (hdMode && backgroundTexture) {
         SDL_RenderCopy(sdlRend, backgroundTexture, nullptr, nullptr);
+    } else {
+        drawStars();
     }
 
     // Reset del z-buffer de CPU (si lo usas)
     std::fill(zbuf.begin(), zbuf.end(), 1e9f);
+
 }
 
 void Renderer::present() {

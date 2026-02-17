@@ -11,7 +11,7 @@ public:
     ~Renderer();
 
     bool init();
-    void clear();
+    void clear(bool hdMode = true);
     void present();
     void setWindowTitle(const std::string& title);
 
@@ -52,4 +52,8 @@ std::vector<SpeedStreak> streaks;
     
     std::vector<float> zbuf;  // buffer de profundidad para relleno
     Uint32 sampleTexture(SDL_Surface* tex, float u, float v) const;
+    struct Star { float x, y; Uint8 brightness; };
+    std::vector<Star> stars;
+    void generateStars(int count = 300);
+    void drawStars();
 };

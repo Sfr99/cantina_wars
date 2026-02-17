@@ -21,6 +21,7 @@ Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
     shipMesh   = Ship::createMesh();
 
     bulletMesh = Bullet::createMesh();
+    Bullet::laserTexture = Bullet::createLaserTexture();
     m_audio.init();
 
     m_audio.loadMusic("../assets/sounds/cantina.mp3");
@@ -324,7 +325,7 @@ void Game::spawnAsteroid() {
 
 
 void Game::render() {
-    renderer.clear();
+    renderer.clear(renderMode == RenderMode::HD);
 
     camera.follow(ship.pos, ship.fwd, ship.up);
     Mat4 view = camera.viewMatrix();
@@ -354,9 +355,12 @@ void Game::render() {
         }
     }
 
-    for (const auto& b : bullets)
+    for (const auto& b : bullets) {
+    if (renderMode == RenderMode::HD)
+        renderer.drawFilledMesh(bulletMesh, b.worldTransform(), view, Bullet::laserTexture);
+    else
         renderer.drawMesh(bulletMesh, b.worldTransform(), view, {255, 255, 50, 255});
-
+}
     renderer.updateSpeedLines(m_dt, m_hyperIntensity);
     renderer.drawSpeedLines(m_hyperIntensity);
 

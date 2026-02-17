@@ -16,4 +16,7 @@ public:
     bool expired() const { return lifetime <= 0.f; }
 
     static Mesh createMesh();
+
+    static SDL_Surface* laserTexture;
+    static SDL_Surface* createLaserTexture();
 };
