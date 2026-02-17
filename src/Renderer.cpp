@@ -196,7 +196,7 @@ Uint32 Renderer::sampleTexture(SDL_Surface* tex, float u, float v) const {
 
 void Renderer::drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
                             Vec3 uv0, Vec3 uv1, Vec3 uv2,
-                            SDL_Surface* texture) {
+                            SDL_Surface* texture, SDL_Color flatColor) {
     int minX = (int)std::min({p0.x, p1.x, p2.x});
     int maxX = (int)std::max({p0.x, p1.x, p2.x});
     int minY = (int)std::min({p0.y, p1.y, p2.y});
@@ -220,33 +220,40 @@ void Renderer::drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
             float w2 = 1.0f - w0 - w1;
 
             if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-            float z = w0 * p0.z + w1 * p1.z + w2 * p2.z;
-            if (z < NEAR) continue;
+                float z = w0 * p0.z + w1 * p1.z + w2 * p2.z;
+                if (z < NEAR) continue;
 
-            const int idx = y * W + x;
+                const int idx = y * W + x;
 
-            // Depth test: menor z => más cercano (en tu cámara z crece hacia delante)
-            if (z >= zbuf[idx]) continue;
-            zbuf[idx] = z;
+                // Depth test: menor z => más cercano (en tu cámara z crece hacia delante)
+                if (z >= zbuf[idx]) continue;
+                zbuf[idx] = z;
 
-            Uint8 r, g, b;
-            if (texture) {
-                float u = w0 * uv0.x + w1 * uv1.x + w2 * uv2.x;
-                float v_coord = w0 * uv0.y + w1 * uv1.y + w2 * uv2.y;
+                Uint8 r, g, b;
+                if (texture) {
+                    float u = w0 * uv0.x + w1 * uv1.x + w2 * uv2.x;
+                    float v_coord = w0 * uv0.y + w1 * uv1.y + w2 * uv2.y;
 
-                Uint32 texColor = sampleTexture(texture, u, v_coord);
-                SDL_GetRGB(texColor, texture->format, &r, &g, &b);
-            } else {
-                float t = (z + 20.f) / 40.f;
-                t = (t < 0.f) ? 0.f : (t > 1.f ? 1.f : t);
-                r = (Uint8)(90  + t * 120);
-                g = (Uint8)(70  + t * 90);
-                b = (Uint8)(40  + t * 70);
+                    Uint32 texColor = sampleTexture(texture, u, v_coord);
+                    SDL_GetRGB(texColor, texture->format, &r, &g, &b);
+                } else {
+                    float t = (z + 20.f) / 40.f;
+                    t = (t < 0.f) ? 0.f : (t > 1.f ? 1.f : t);
+                    r = flatColor.r;
+                    g = flatColor.g;
+                    b = flatColor.b;
+                }
+
+                SDL_SetRenderDrawColor(sdlRend, r, g, b, 255);
+                SDL_RenderDrawPoint(sdlRend, x, y);
+                static int pixCount = 0;
+                static bool reported = false;
+                pixCount++;
+                if (pixCount > 100 && !reported) {
+                    reported = true;
+                    printf("drawTriangle IS writing pixels\n");
+                }
             }
-
-            SDL_SetRenderDrawColor(sdlRend, r, g, b, 255);
-            SDL_RenderDrawPoint(sdlRend, x, y);
-        }
 
         }
     }
@@ -272,7 +279,7 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
             screenVerts[i] = {-9999, -9999, -9999};
         }
     }
-
+    int drawn = 0;
     for (const auto& tri : mesh.tris) {
         Vec3 v0 = viewVerts[tri.a];
         Vec3 v1 = viewVerts[tri.b];
@@ -280,8 +287,8 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
 
         Vec3 e1 = v1 - v0;
         Vec3 e2 = v2 - v0;
-        Vec3 normal = e1.cross(e2);
-        if (normal.dot(v0) >= 0) continue;
+        //Vec3 normal = e1.cross(e2);
+        //if (normal.dot(v0) >= 0) continue;
 
         if (v0.z < NEAR && v1.z < NEAR && v2.z < NEAR) continue;
 
@@ -294,9 +301,26 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
         Vec3 uv0 = !mesh.uvs.empty() ? mesh.uvs[tri.a] : Vec3{0,0,0};
         Vec3 uv1 = !mesh.uvs.empty() ? mesh.uvs[tri.b] : Vec3{0,0,0};
         Vec3 uv2 = !mesh.uvs.empty() ? mesh.uvs[tri.c] : Vec3{0,0,0};
-
-        drawTriangle(p0, p1, p2, uv0, uv1, uv2, texture);
+        static int tc = 0;
+        if (tc++ < 5) printf("tri screen: (%.1f,%.1f,z=%.1f) (%.1f,%.1f,z=%.1f) (%.1f,%.1f,z=%.1f)\n",
+            p0.x,p0.y,p0.z, p1.x,p1.y,p1.z, p2.x,p2.y,p2.z);
+        SDL_Color flatCol = {180, 100, 40, 255};
+        if (!mesh.colors.empty()) {
+            SDL_Color c0 = mesh.colors[tri.a];
+            SDL_Color c1 = mesh.colors[tri.b];
+            SDL_Color c2 = mesh.colors[tri.c];
+            flatCol = {
+                (Uint8)((c0.r+c1.r+c2.r)/3),
+                (Uint8)((c0.g+c1.g+c2.g)/3),
+                (Uint8)((c0.b+c1.b+c2.b)/3),
+                255
+            };
+        }
+        drawTriangle(p0, p1, p2, uv0, uv1, uv2, texture, flatCol);
+        drawn++;
     }
+    static int frame = 0;
+    if (frame++ < 3) printf("Dibujando mesh con %zu tris, se dibujaron %d\n", mesh.tris.size(), drawn);
 }
 
 static float frand01() { return (float)(rand() % 10000) / 10000.f; }

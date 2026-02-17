@@ -38,6 +38,7 @@ private:
     std::vector<Bullet>   bullets;
 
     Mesh shipMesh;
+    Mesh shipMeshHD; 
     Mesh bulletMesh;
 
     int       score    = 0;

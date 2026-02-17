@@ -17,36 +17,24 @@ static void loadDisplacementMaps() {
     if (loaded) return;
     loaded = true;
 
-    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG) & (IMG_INIT_PNG | IMG_INIT_JPG))) {
+   /* if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG) & (IMG_INIT_PNG | IMG_INIT_JPG))) {
         printf("Warning: IMG_Init failed: %s\n", IMG_GetError());
         return;
-    }
+    }*/
 
     for (int i = 0; i < 7; i++) {
         char dispPath[64], diffPath[64];
 
-        snprintf(dispPath, sizeof(dispPath), "asteroid_disp_%d.png", i);
+        snprintf(dispPath, sizeof(dispPath), "../assets/rocks/asteroid_disp_%d.png", i);
         g_dispMaps[i] = IMG_Load(dispPath);
-        if (!g_dispMaps[i]) {
-            snprintf(dispPath, sizeof(dispPath), "bin/asteroid_disp_%d.png", i);
-            g_dispMaps[i] = IMG_Load(dispPath);
-        }
-
-        snprintf(diffPath, sizeof(diffPath), "asteroid_diff_%d.jpg", i);
-        g_diffuseMaps[i] = IMG_Load(diffPath);
-
         if (!g_diffuseMaps[i]) {
-            snprintf(diffPath, sizeof(diffPath), "bin/asteroid_diff_%d.jpg", i);
+            snprintf(diffPath, sizeof(diffPath), "../assets/rocks/asteroid_diff_%d.png", i);
             g_diffuseMaps[i] = IMG_Load(diffPath);
         }
-        if (!g_diffuseMaps[i]) {
-            snprintf(diffPath, sizeof(diffPath), "asteroid_diff_%d.png", i);
-            g_diffuseMaps[i] = IMG_Load(diffPath);
-        }
-        if (!g_diffuseMaps[i]) {
-            snprintf(diffPath, sizeof(diffPath), "bin/asteroid_diff_%d.png", i);
-            g_diffuseMaps[i] = IMG_Load(diffPath);
-        }
+        printf("Trying to load: %s\n", dispPath);
+        g_dispMaps[i] = IMG_Load(dispPath);
+        if (!g_dispMaps[i]) printf("FAILED: %s\n", IMG_GetError());
+        else printf("OK\n");
 
         if (g_diffuseMaps[i]) {
             SDL_Surface* conv = SDL_ConvertSurfaceFormat(g_diffuseMaps[i], SDL_PIXELFORMAT_ARGB8888, 0);
@@ -59,21 +47,21 @@ static void loadDisplacementMaps() {
 
         if (g_dispMaps[i]) {
             g_dispMapCount++;
-            printf("✓ Loaded: %s (%dx%d)", dispPath, g_dispMaps[i]->w, g_dispMaps[i]->h);
+            /*printf(" Loaded: %s (%dx%d)", dispPath, g_dispMaps[i]->w, g_dispMaps[i]->h);
             if (g_diffuseMaps[i]) {
                 printf(" + diffuse (%dx%d)", g_diffuseMaps[i]->w, g_diffuseMaps[i]->h);
             }
-            printf("\n");
+            printf("\n");*/
         }
     }
 
-    if (g_dispMapCount == 0) {
-        printf("⚠ Warning: No displacement maps found\n");
+    /*if (g_dispMapCount == 0) {
+        printf(" Warning: No displacement maps found\n");
         printf("   Expected: asteroid_disp_0.png ... asteroid_disp_6.png\n");
         printf("   Optional: asteroid_diff_0.jpg ... asteroid_diff_6.jpg\n");
     } else {
         printf("✓ Total displacement maps loaded: %d\n", g_dispMapCount);
-    }
+    }*/
 }
 
 
@@ -192,11 +180,11 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
 
     SDL_Surface* dispMap = (texIndex >= 0) ? g_dispMaps[texIndex] : nullptr;
     
-    if (dispMap) {
+    /*if (dispMap) {
         printf("  → Using maps %d for asteroid (seed=%d)\n", texIndex, seed);
     } else {
         printf("  → No displacement map, using random perturbation\n");
-    }
+    }*/
 
     const float phi = (1.f + sqrtf(5.f)) * 0.5f;
 

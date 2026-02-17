@@ -66,7 +66,7 @@ namespace audio {
             std::unordered_map<std::string, Mix_Chunk*> m_sfxCache;
 
             int m_musicVolume = 20;
-            int m_SFXVolume = 96;
+            int m_SFXVolume = 20;
 
             std::string m_lastError;
     };

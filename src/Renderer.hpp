@@ -47,7 +47,8 @@ std::vector<SpeedStreak> streaks;
     
     void drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
                      Vec3 uv0, Vec3 uv1, Vec3 uv2,
-                     SDL_Surface* texture);
+                     SDL_Surface* texture,
+                     SDL_Color flatColor = {255,255,255,255});
     
     std::vector<float> zbuf;  // buffer de profundidad para relleno
     Uint32 sampleTexture(SDL_Surface* tex, float u, float v) const;

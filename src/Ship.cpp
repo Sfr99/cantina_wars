@@ -1,4 +1,6 @@
 #include "Ship.hpp"
+#include <map>
+#include <ostream>
 
 Mesh Ship::createMesh() {
     return {
@@ -33,26 +35,45 @@ void Ship::rotate(Vec3 axis, float angle) {
 }
 
 void Ship::handleInput(const Uint8* keys, float dt) {
-    // Solo rotación suave lateral (sin roll completo)
     const float STRAFE_SPEED = 22.f;
-    const float TILT_AMOUNT = 0.35f;
-    
-    Vec3 movement = {0, 0, 0};
-    
-    if (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT])  movement.x += 1.f;
-    if (keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) movement.x -= 1.f;
-    if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP])    movement.y += 1.f;
-    if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN])  movement.y -= 1.f;
-    
-    // Aplicar movimiento lateral
-    vel.x = movement.x * STRAFE_SPEED;
-    vel.y = movement.y * STRAFE_SPEED;
-    vel.z = FORWARD_SPEED;  // velocidad constante hacia adelante
-    
-    // Inclinación visual según movimiento lateral
-    rot.z = -movement.x * TILT_AMOUNT;
-    rot.x = movement.y * TILT_AMOUNT;
-    
+    const float TILT_AMOUNT  = 0.35f;
+    const float ACCEL        = 120.f;  // qué tan rápido acelera
+    const float DECEL        = 180.f;  // qué tan rápido frena
+
+    Vec3 input = {0, 0, 0};
+    if (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT])  input.x =  1.f;
+    if (keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) input.x = -1.f;
+    if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP])    input.y =  1.f;
+    if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN])  input.y = -1.f;
+
+    // X
+    if (input.x != 0.f) {
+        vel.x += input.x * ACCEL * dt;
+        vel.x = std::max(-STRAFE_SPEED, std::min(STRAFE_SPEED, vel.x));
+    } else {
+        float dec = DECEL * dt;
+        if (vel.x >  dec) vel.x -= dec;
+        else if (vel.x < -dec) vel.x += dec;
+        else vel.x = 0.f;
+    }
+
+    // Y
+    if (input.y != 0.f) {
+        vel.y += input.y * ACCEL * dt;
+        vel.y = std::max(-STRAFE_SPEED, std::min(STRAFE_SPEED, vel.y));
+    } else {
+        float dec = DECEL * dt;
+        if (vel.y >  dec) vel.y -= dec;
+        else if (vel.y < -dec) vel.y += dec;
+        else vel.y = 0.f;
+    }
+
+    vel.z = FORWARD_SPEED;
+
+    // Inclinación proporcional a la velocidad actual
+    rot.z = -(vel.x / STRAFE_SPEED) * TILT_AMOUNT;
+    rot.x =  (vel.y / STRAFE_SPEED) * TILT_AMOUNT;
+
     // Disparo
     shootCooldown -= dt;
     wantsShoot = keys[SDL_SCANCODE_F] && (shootCooldown <= 0.f);
@@ -82,7 +103,6 @@ void Ship::update(float dt) {
 
 Mat4 Ship::worldTransform() const {
     return Mat4::translation(pos.x, pos.y, pos.z)
-         * Mat4::rotationY(rot.y)
          * Mat4::rotationX(rot.x)
          * Mat4::rotationZ(rot.z)
          * Mat4::scale(scale);
@@ -99,3 +119,78 @@ void Ship::respawn() {
     invincibleTimer = 3.f;
     alive = true;
 }
+
+Mesh Ship::loadGLTFMesh(const char* binPath) {
+    FILE* f = fopen(binPath, "rb");
+    if (!f) {
+        printf(" Cannot open %s — using fallback mesh\n", binPath);
+        return createMesh();
+    }
+    fseek(f, 0, SEEK_END);
+    size_t sz = (size_t)ftell(f);
+    rewind(f);
+    std::vector<uint8_t> bin(sz);
+    fread(bin.data(), 1, sz, f);
+    fclose(f);
+
+    // Hardcoded from scene.gltf
+    // bufferView 2 (positions, float VEC3 stride=12) starts at file byte 59736
+    // bufferView 0 (indices,   uint32 SCALAR)        starts at file byte 0
+    struct PrimDesc {
+        size_t posOff; int posCount;
+        size_t idxOff; int idxCount;
+    };
+    const size_t BV2 = 59736;
+    PrimDesc prims[] = {
+        {BV2+    0, 982,  0,     2274},   // body
+        {BV2+23568, 106,  9096,  228 },   // cockpit
+        {BV2+26112, 327,  10008, 708 },   // accent
+        {BV2+33960, 1264, 12840, 2454},   // rubber
+        {BV2+64296, 970,  22656, 1740},   // weapons
+        {BV2+87576, 56,   29616, 120 },   // thruster
+    };
+
+    SDL_Color matColors[] = {
+        {132,  26,   6, 255},   // Metal_body      — rojo
+        { 13,  34,  40, 255},   // Cockpit         — azul oscuro
+        { 66,  66,  66, 255},   // Metal_accent    — gris
+        {  5,   5,   5, 255},   // Dull_metalrubber— negro
+        { 63,  93, 114, 255},   // Weapons         — azul gris
+        { 54, 255, 255, 255},   // Thruster        — cyan emisivo
+    };
+
+    std::vector<Vec3>      allVerts;
+    std::vector<Triangle>  allTris;
+    std::vector<SDL_Color> allColors;   // ← añadir
+
+    const float SCALE = 0.22f;
+
+    for (int pi = 0; pi < 6; pi++) {
+        auto& p = prims[pi];
+        const int base = (int)allVerts.size();
+
+        const float* pos = (const float*)(bin.data() + p.posOff);
+        for (int i = 0; i < p.posCount; i++) {
+            allVerts.push_back({ pos[i*3]*SCALE, pos[i*3+1]*SCALE, pos[i*3+2]*SCALE });
+            allColors.push_back(matColors[pi]);   // ← un color por vértice
+        }
+
+        const uint32_t* idx = (const uint32_t*)(bin.data() + p.idxOff);
+        for (int i = 0; i < p.idxCount; i += 3)
+            allTris.push_back({ (int)idx[i]+base, (int)idx[i+1]+base, (int)idx[i+2]+base });
+    }
+
+    // Derive edges from triangles (needed for wireframe fallback)
+    std::map<std::pair<int,int>, bool> edgeSet;
+    for (auto& t : allTris) {
+        auto add = [&](int a, int b) {
+            edgeSet[(a<b) ? std::make_pair(a,b) : std::make_pair(b,a)] = true;
+        };
+        add(t.a,t.b); add(t.b,t.c); add(t.c,t.a);
+    }
+    std::vector<Edge> edges;
+    for (auto& [k,_] : edgeSet) edges.push_back({k.first, k.second});
+
+    printf(" Ship GLTF: %zu verts, %zu tris\n", allVerts.size(), allTris.size());
+    return {allVerts, edges, allTris, {}, allColors};
+}   

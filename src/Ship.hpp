@@ -22,11 +22,11 @@ public:
     Mat4 worldTransform() const override;
     void respawn();
     void setSpeedMultiplier(float m) { speedMult = m; }
-
+    static Mesh loadGLTFMesh(const char* binPath);
 private:
     void rotate(Vec3 axis, float angle);
     float speedMult = 1.f;
-
+    
     static constexpr float FORWARD_SPEED = 30.f;
     static constexpr float SHOOT_DELAY   = 0.22f;
 };

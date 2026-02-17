@@ -17,7 +17,9 @@ static float approach01(float v, float target, float dt, float timeToTarget) {
 
 Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
     srand((unsigned)time(nullptr));
+    shipMeshHD  = Ship::loadGLTFMesh("../assets/ship/scene.bin");
     shipMesh   = Ship::createMesh();
+
     bulletMesh = Bullet::createMesh();
     m_audio.init();
 
@@ -27,17 +29,17 @@ Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
 
     
     // Spawn inicial de asteroides
-    printf("Spawning initial asteroids...\n");
+   // printf("Spawning initial asteroids...\n");
     for (int i = 0; i < 15; i++) {
         spawnAsteroid();
     }
-    printf("Initial asteroids: %zu\n", asteroids.size());
+    // printf("Initial asteroids: %zu\n", asteroids.size());
 }
 
 void Game::spawnWave() {
     wave++;
     int count = 5 + wave * 3; 
-    printf("\n=== SPAWNING WAVE %d: %d ASTEROIDS ===\n", wave, count);
+   //printf("\n=== SPAWNING WAVE %d: %d ASTEROIDS ===\n", wave, count);
     for (int i = 0; i < count; i++) {
         spawnAsteroid();
     }
@@ -61,10 +63,10 @@ void Game::run() {
         const Uint8* ks = SDL_GetKeyboardState(nullptr);
         const bool spaceHeld = ks[SDL_SCANCODE_SPACE];
         static Uint32 t0 = SDL_GetTicks();
-        if (SDL_GetTicks() - t0 < 5000) {
+        /*if (SDL_GetTicks() - t0 < 5000) {
             printf("spaceHeld=%d charge=%.2f speedMult=%.2f\n",
                 spaceHeld ? 1 : 0, hyperspace.charge, 1.f + hyperspace.charge * (hyperspace.maxMult - 1.f));
-        }
+        }*/
 
         hyperspace.charge = approach01(
             hyperspace.charge,
@@ -133,9 +135,7 @@ void Game::update(float dt) {
         constexpr float BULLET_MUZZLE_SPEED = 90.f;   // velocidad relativa extra (ajusta)
         Vec3 bpos = ship.pos + Vec3{0.f, 0.f, 2.5f};
 
-        // Hereda la velocidad actual de la nave + extra hacia delante
-        Vec3 bvel = ship.vel;
-        bvel.z += BULLET_MUZZLE_SPEED;
+        Vec3 bvel = {0.f, 0.f, ship.vel.z + BULLET_MUZZLE_SPEED};
 
         bullets.emplace_back(bpos, bvel);
 
@@ -332,7 +332,14 @@ void Game::render() {
     // Nave (parpadea mientras es invencible)
     bool drawShip = !ship.invincible || ((SDL_GetTicks() / 120) % 2 == 0);
     if (ship.alive && drawShip)
-        renderer.drawMesh(shipMesh, ship.worldTransform(), view, {0, 210, 255, 255});
+        if (ship.alive && drawShip) {
+            if (renderMode == RenderMode::HD) {
+                Mat4 hdTransform = ship.worldTransform() * Mat4::rotationX(-1.5708f);
+                renderer.drawFilledMesh(shipMeshHD, hdTransform, view, nullptr);
+            } else {
+                renderer.drawMesh(shipMesh, ship.worldTransform(), view, {0, 210, 255, 255});
+            }
+        }
 
     for (const auto& a : asteroids) {
         if (renderMode == RenderMode::HD) {
@@ -352,7 +359,6 @@ void Game::render() {
 
     renderer.updateSpeedLines(m_dt, m_hyperIntensity);
     renderer.drawSpeedLines(m_hyperIntensity);
-
 
     renderer.present();
 }
