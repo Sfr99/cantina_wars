@@ -1,3 +1,0 @@
-"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\cantina_wars.dir/objects.a
-C:\ProgramData\mingw64\mingw64\bin\ar.exe qc CMakeFiles\cantina_wars.dir/objects.a @CMakeFiles\cantina_wars.dir\objects1.rsp
-C:\ProgramData\mingw64\mingw64\bin\c++.exe -mwindows -static-libgcc -static-libstdc++ -Wl,--whole-archive CMakeFiles\cantina_wars.dir/objects.a -Wl,--no-whole-archive -o C:\Users\javie\Documents\p2_vg\bin\cantina_wars.exe -Wl,--out-implib,libcantina_wars.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\cantina_wars.dir\linkLibs.rsp
