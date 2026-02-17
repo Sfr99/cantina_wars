@@ -191,6 +191,6 @@ Mesh Ship::loadGLTFMesh(const char* binPath) {
     std::vector<Edge> edges;
     for (auto& [k,_] : edgeSet) edges.push_back({k.first, k.second});
 
-    printf(" Ship GLTF: %zu verts, %zu tris\n", allVerts.size(), allTris.size());
+    //printf(" Ship GLTF: %zu verts, %zu tris\n", allVerts.size(), allTris.size());
     return {allVerts, edges, allTris, {}, allColors};
 }   

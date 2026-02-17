@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <random>
 #include "music.hpp"
+#include <SDL2/SDL_mixer.h>
 
 static float approach01(float v, float target, float dt, float timeToTarget) {
     if (timeToTarget <= 1e-6f) return target;
@@ -24,10 +25,9 @@ Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
     Bullet::laserTexture = Bullet::createLaserTexture();
     m_audio.init();
 
-    m_audio.loadMusic("../assets/sounds/cantina.mp3");
-    m_audio.playMusic(-1); 
     m_audio.preloadSFX("../assets/sounds/laser.mp3");
-
+    m_audio.preloadSFX("../assets/sounds/explosion.wav");
+    m_audio.preloadSFX("../assets/sounds/boost.mp3");
     
     // Spawn inicial de asteroides
    // printf("Spawning initial asteroids...\n");
@@ -49,7 +49,8 @@ void Game::spawnWave() {
 
 void Game::run() {
     if (!renderer.init()) return;
-
+    m_audio.loadMusic("../assets/sounds/cantina.mp3");
+    m_audio.playMusic(-1);
     spawnWave();
 
     Uint32 lastTime = SDL_GetTicks();
@@ -79,8 +80,15 @@ void Game::run() {
         m_dt = dt;
         m_hyperIntensity = hyperspace.charge;
 
-        const float speedMult = 1.f + hyperspace.charge * (hyperspace.maxMult - 1.f);
-        ship.setSpeedMultiplier(speedMult);
+        static bool wasBosting = false;
+        bool isBoosting = hyperspace.charge > 0.1f;
+        if (isBoosting && !wasBosting)
+            m_boostChannel = m_audio.playSFX("../assets/sounds/boost.mp3", -1);
+        else if (!isBoosting && wasBosting && m_boostChannel >= 0) {
+            Mix_HaltChannel(m_boostChannel);
+            m_boostChannel = -1;
+        }
+        wasBosting = isBoosting;
 
         update(dt);
         render();
@@ -99,7 +107,7 @@ void Game::handleEvents() {
                 renderMode = (renderMode == RenderMode::LOW_POLY) ? RenderMode::HD : RenderMode::LOW_POLY;
                 
                 const char* modeName = (renderMode == RenderMode::HD) ? "HD" : "LOW_POLY";
-                printf("\n=== SWITCHING TO %s MODE ===\n", modeName);
+                //printf("\n=== SWITCHING TO %s MODE ===\n", modeName);
                 
                 // Guardar estado de asteroides existentes
                 struct AsteroidData { Vec3 pos, vel; AsteroidSize size; int seed; };
@@ -108,7 +116,7 @@ void Game::handleEvents() {
                     data.push_back({a.pos, a.vel, a.size, rand()});
                 }
                 
-                printf("Regenerating %zu asteroids...\n", data.size());
+                //printf("Regenerating %zu asteroids...\n", data.size());
                 
                 // Regenerar con nuevo modo
                 asteroids.clear();
@@ -116,7 +124,7 @@ void Game::handleEvents() {
                     asteroids.emplace_back(d.pos, d.vel, d.size, renderMode, d.seed);
                 }
                 
-                printf("=== DONE ===\n\n");
+                //printf("=== DONE ===\n\n");
             }
         }
     }
@@ -220,6 +228,7 @@ void Game::checkCollisions() {
             if (!a.alive) continue;
             if (sphereCollide(ship.pos, 1.5f, a.pos, a.radius)) {
                 lives--;
+                int ch = m_audio.playSFX("../assets/sounds/explosion.wav");
                 if (lives <= 0) {
                     state = GameState::GAME_OVER;
                     renderer.setWindowTitle("GAME OVER | Score: " + std::to_string(score) + " | Pulsa R para reiniciar");

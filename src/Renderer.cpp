@@ -340,7 +340,7 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
         drawn++;
     }
     static int frame = 0;
-    if (frame++ < 3) printf("Dibujando mesh con %zu tris, se dibujaron %d\n", mesh.tris.size(), drawn);
+    //if (frame++ < 3) printf("Dibujando mesh con %zu tris, se dibujaron %d\n", mesh.tris.size(), drawn);
 }
 
 static float frand01() { return (float)(rand() % 10000) / 10000.f; }

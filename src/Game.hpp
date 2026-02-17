@@ -26,7 +26,7 @@ private:
         float decayTime  = 0.5f;  // seg hasta 0
         float maxMult    = 3.0f;  // multiplicador máximo
     };
-
+    int m_boostChannel = -1;
     HyperspaceState hyperspace;
 
     audio::MusicSystem& m_audio;

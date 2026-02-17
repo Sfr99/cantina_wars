@@ -31,10 +31,6 @@ static void loadDisplacementMaps() {
             snprintf(diffPath, sizeof(diffPath), "../assets/rocks/asteroid_diff_%d.png", i);
             g_diffuseMaps[i] = IMG_Load(diffPath);
         }
-        printf("Trying to load: %s\n", dispPath);
-        g_dispMaps[i] = IMG_Load(dispPath);
-        if (!g_dispMaps[i]) printf("FAILED: %s\n", IMG_GetError());
-        else printf("OK\n");
 
         if (g_diffuseMaps[i]) {
             SDL_Surface* conv = SDL_ConvertSurfaceFormat(g_diffuseMaps[i], SDL_PIXELFORMAT_ARGB8888, 0);
