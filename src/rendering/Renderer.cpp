@@ -24,16 +24,12 @@ Renderer::~Renderer() {
     if (backgroundTexture) SDL_DestroyTexture(backgroundTexture);
     if (sdlRend)           SDL_DestroyRenderer(sdlRend);
     if (window)            SDL_DestroyWindow(window);
-    IMG_Quit();
-    SDL_Quit();
 }
 
-/* Crea ventana y renderer SDL, carga el fondo y genera el campo de estrellas. */
+/* Crea ventana y renderer SDL, carga el fondo y genera el campo de estrellas.
+   Idempotente: no hace nada si ya fue inicializado. */
 bool Renderer::init() {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) return false;
-
-    const int imgFlags = IMG_INIT_PNG | IMG_INIT_JPG;
-    IMG_Init(imgFlags);
+    if (window) return true;
 
     window = SDL_CreateWindow("Asteroid 3D",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,

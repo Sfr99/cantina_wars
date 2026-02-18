@@ -2,6 +2,10 @@
  * rendering/Renderer.hpp
  * Encapsula SDL2 window/renderer y ofrece primitivas de rasterización software:
  * wireframe, relleno con z-buffer, texturizado, fondo y líneas de velocidad.
+ *
+ * NOTA: el ciclo de vida de SDL (SDL_Init/SDL_Quit, IMG_Init/IMG_Quit) es
+ * responsabilidad del llamador (main). Renderer solo gestiona la ventana y el
+ * renderer SDL internos.
  */
 #pragma once
 #include <SDL2/SDL.h>
@@ -15,7 +19,7 @@ public:
     Renderer(int w, int h);
     ~Renderer();
 
-    /* Inicializa ventana, renderer SDL y carga el fondo. Devuelve false si falla. */
+    /* Crea la ventana y el renderer SDL. Debe llamarse después de SDL_Init. */
     bool init();
 
     /* Limpia el framebuffer y el z-buffer; dibuja fondo HD o estrellas según hdMode. */
@@ -37,6 +41,9 @@ public:
     int width()  const { return W; }
     int height() const { return H; }
 
+    /* Expone el SDL_Renderer subyacente para dibujo directo (UI, texto, rects). */
+    SDL_Renderer* sdlRenderer() const { return sdlRend; }
+
     /* Actualiza posición y vida de las líneas de velocidad según la intensidad [0,1]. */
     void updateSpeedLines(float dt, float intensity);
 
@@ -54,8 +61,8 @@ private:
     struct Star { float x, y; Uint8 brightness; };
 
     int           W, H;
-    SDL_Window*   window           = nullptr;
-    SDL_Renderer* sdlRend          = nullptr;
+    SDL_Window*   window            = nullptr;
+    SDL_Renderer* sdlRend           = nullptr;
     SDL_Texture*  backgroundTexture = nullptr;
 
     std::vector<float>       zbuf;
@@ -65,19 +72,14 @@ private:
     static constexpr float FOV  = 600.f;
     static constexpr float NEAR = 0.5f;
 
-    /* Proyecta un punto en espacio cámara a coordenadas de pantalla. Devuelve false si está tras el plano near. */
     bool projectPoint(Vec3 viewPos, float& sx, float& sy) const;
-
-    /* Recorta un segmento contra el plano near; devuelve false si queda completamente detrás. */
     bool clipLine(Vec3& a, Vec3& b) const;
 
-    /* Rasteriza un triángulo ya proyectado con interpolación baricéntrica y z-test. */
     void drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
                       Vec3 uv0, Vec3 uv1, Vec3 uv2,
                       SDL_Surface* texture,
                       SDL_Color flatColor = {255, 255, 255, 255});
 
-    /* Muestrea una textura ARGB8888 en UV normalizadas con wrap y flip-V. */
     Uint32 sampleTexture(SDL_Surface* tex, float u, float v) const;
 
     void generateStars(int count = 300);

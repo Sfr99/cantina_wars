@@ -18,14 +18,14 @@ namespace audio { class MusicSystem; }
 
 class Game {
 public:
-    explicit Game(audio::MusicSystem& audio);
+    Game(audio::MusicSystem& audio, Renderer& renderer);
 
     /* Inicializa renderer y audio, lanza el loop principal. Bloquea hasta que el juego cierra. */
     void run();
 
 private:
     audio::MusicSystem& m_audio;
-    Renderer            renderer;
+    Renderer&           renderer;
     Camera              camera;
     Ship                ship;
 
@@ -40,6 +40,7 @@ private:
     float            m_dt            = 0.f;
     float            m_hyperIntensity = 0.f;
     int              m_boostChannel  = -1;
+    bool             m_wasBoosting   = false;
 
     int        score       = 0;
     int        lives       = 3;

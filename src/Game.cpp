@@ -8,7 +8,7 @@
 #include <string>
 #include <algorithm>
 
-Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
+Game::Game(audio::MusicSystem& audio, Renderer& renderer) : m_audio(audio), renderer(renderer) {
     srand((unsigned)time(nullptr));
 
     shipMeshHD = GLTFLoader::loadShipMesh("../assets/ship/scene.bin");
@@ -26,7 +26,7 @@ Game::Game(audio::MusicSystem& audio) : m_audio(audio), renderer(900, 600) {
 
 /* Carga música, lanza la primera oleada y ejecuta el loop hasta que running=false. */
 void Game::run() {
-    if (!renderer.init()) return;
+
 
     m_audio.loadMusic("../assets/sounds/cantina.mp3");
     m_audio.playMusic(-1);
@@ -50,14 +50,13 @@ void Game::run() {
 
         // Gestiona el canal de audio del boost (loop mientras activo)
         const bool isBoosting = hyperspace.charge > 0.1f;
-        static bool wasBoosting = false;
-        if (isBoosting && !wasBoosting)
+        if (isBoosting && !m_wasBoosting)
             m_boostChannel = m_audio.playSFX("../assets/sounds/boost.mp3", -1);
-        else if (!isBoosting && wasBoosting && m_boostChannel >= 0) {
+        else if (!isBoosting && m_wasBoosting && m_boostChannel >= 0) {
             Mix_HaltChannel(m_boostChannel);
             m_boostChannel = -1;
         }
-        wasBoosting = isBoosting;
+        m_wasBoosting = isBoosting;
 
         update(dt);
         render();

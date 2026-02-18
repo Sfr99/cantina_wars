@@ -11,7 +11,7 @@
 
 enum class AsteroidSize { LARGE, MEDIUM, SMALL };
 enum class RenderMode   { LOW_POLY, HD };
-
+    
 class Asteroid : public Entity {
 public:
     AsteroidSize size;

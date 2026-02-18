@@ -1,0 +1,101 @@
+/*
+ * ui/BitmapFont.hpp
+ * Font bitmap 5x7 para uppercase A-Z y espacio. Header-only, sin dependencias
+ * externas. Cada glifo se define como 7 filas de 5 bits (izq=MSB).
+ * Uso: BitmapFont::drawText(sdlRend, "HOLA", x, y, scale, color);
+ *
+ * Los patrones de glifo están basados en la fuente pública "Tom Thumb" (3x5)
+ * de Robey Pointer, adaptados a 5x7 y redibujados manualmente:
+ *   https://robey.lag.net/2010/01/23/tiny-monospace-font.html
+ * También se tomó como referencia el estándar de matrices de puntos 5x7
+ * descrito en la hoja de datos del Hitachi HD44780 (LCD controller, 1998),
+ * que define el juego de caracteres de facto para displays de caracteres.
+ */
+#pragma once
+#include <SDL2/SDL.h>
+#include <cstring>
+
+namespace BitmapFont {
+
+static constexpr int GLYPH_W = 5;
+static constexpr int GLYPH_H = 7;
+static constexpr int CHAR_GAP = 1; // píxeles entre caracteres
+
+/* Datos de glifo: glyph[fila], 5 bits por fila, bit4=columna izquierda. */
+static const uint8_t GLYPHS[27][7] = {
+    /* A */ {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11},
+    /* B */ {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E},
+    /* C */ {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E},
+    /* D */ {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E},
+    /* E */ {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F},
+    /* F */ {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10},
+    /* G */ {0x0E,0x11,0x10,0x17,0x11,0x11,0x0F},
+    /* H */ {0x11,0x11,0x11,0x1F,0x11,0x11,0x11},
+    /* I */ {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E},
+    /* J */ {0x07,0x02,0x02,0x02,0x12,0x12,0x0C},
+    /* K */ {0x11,0x12,0x14,0x18,0x14,0x12,0x11},
+    /* L */ {0x10,0x10,0x10,0x10,0x10,0x10,0x1F},
+    /* M */ {0x11,0x1B,0x15,0x11,0x11,0x11,0x11},
+    /* N */ {0x11,0x19,0x15,0x13,0x11,0x11,0x11},
+    /* O */ {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E},
+    /* P */ {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10},
+    /* Q */ {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D},
+    /* R */ {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11},
+    /* S */ {0x0E,0x11,0x10,0x0E,0x01,0x11,0x0E},
+    /* T */ {0x1F,0x04,0x04,0x04,0x04,0x04,0x04},
+    /* U */ {0x11,0x11,0x11,0x11,0x11,0x11,0x0E},
+    /* V */ {0x11,0x11,0x11,0x11,0x11,0x0A,0x04},
+    /* W */ {0x11,0x11,0x11,0x15,0x15,0x1B,0x11},
+    /* X */ {0x11,0x11,0x0A,0x04,0x0A,0x11,0x11},
+    /* Y */ {0x11,0x11,0x0A,0x04,0x04,0x04,0x04},
+    /* Z */ {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F},
+    /* ' ' */ {0x00,0x00,0x00,0x00,0x00,0x00,0x00},
+};
+
+/* Devuelve el índice en GLYPHS para un carácter dado; usa espacio como fallback. */
+inline int glyphIndex(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a';
+    return 26; // espacio
+}
+
+/* Ancho en píxeles de pantalla de una cadena con la escala dada. */
+inline int textWidth(const char* text, int scale) {
+    int len = (int)strlen(text);
+    if (len == 0) return 0;
+    return len * (GLYPH_W * scale + CHAR_GAP) - CHAR_GAP;
+}
+
+/* Dibuja un único carácter en (x, y) con la escala y color dados. */
+inline void drawChar(SDL_Renderer* rend, char c, int x, int y,
+                     int scale, SDL_Color color) {
+    SDL_SetRenderDrawColor(rend, color.r, color.g, color.b, color.a);
+    const uint8_t* glyph = GLYPHS[glyphIndex(c)];
+    for (int row = 0; row < GLYPH_H; row++) {
+        for (int col = 0; col < GLYPH_W; col++) {
+            if (glyph[row] & (0x10 >> col)) {
+                SDL_Rect px{ x + col * scale, y + row * scale, scale, scale };
+                SDL_RenderFillRect(rend, &px);
+            }
+        }
+    }
+}
+
+/* Dibuja una cadena de texto desde (x, y). */
+inline void drawText(SDL_Renderer* rend, const char* text, int x, int y,
+                     int scale, SDL_Color color) {
+    int cx = x;
+    for (const char* p = text; *p; p++) {
+        drawChar(rend, *p, cx, y, scale, color);
+        cx += GLYPH_W * scale + CHAR_GAP;
+    }
+}
+
+/* Dibuja texto centrado horizontalmente en centerX. */
+inline void drawTextCentered(SDL_Renderer* rend, const char* text,
+                             int centerX, int y, int scale, SDL_Color color) {
+    int x = centerX - textWidth(text, scale) / 2;
+    drawText(rend, text, x, y, scale, color);
+}
+
+} // namespace BitmapFont
