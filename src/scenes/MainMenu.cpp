@@ -15,8 +15,8 @@ static constexpr int BTN_H      = 48;
 static constexpr int BTN_GAP    = 16;
 static constexpr int BTN_START_Y = 230;
 
-MainMenu::MainMenu(audio::MusicSystem& audio, Renderer& renderer)
-    : m_audio(audio), renderer(renderer)
+MainMenu::MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config)
+    : m_audio(audio), renderer(renderer), m_config(config)
 {
     buildButtons();
     initBackground();
@@ -29,7 +29,7 @@ void MainMenu::buildButtons() {
     struct Def { const char* label; bool enabled; };
     const Def defs[] = {
         {"JUGAR",          true },
-        {"DIFICULTAD",     false},
+        {"DIFICULTAD",     true },
         {"RANKING",        false},
         {"CONFIGURACION",  false},
         {"SALIR",          true },
@@ -149,13 +149,10 @@ void MainMenu::handleEvents() {
                     break;
                 case SDLK_RETURN:
                 case SDLK_KP_ENTER:
-                    if (m_buttons[m_selected].label == "JUGAR") {
-                        m_result = MenuResult::PLAY;
-                        m_done   = true;
-                    } else if (m_buttons[m_selected].label == "SALIR") {
-                        m_result = MenuResult::QUIT;
-                        m_done   = true;
-                    }
+                    const std::string& lbl = m_buttons[m_selected].label;
+                    if      (lbl == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
+                    else if (lbl == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
+                    else if (lbl == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
                     break;
             }
         }
@@ -177,8 +174,9 @@ void MainMenu::handleEvents() {
             for (auto& b : m_buttons) {
                 if (!b.enabled) continue;
                 if (!b.contains(e.button.x, e.button.y)) continue;
-                if (b.label == "JUGAR") { m_result = MenuResult::PLAY;  m_done = true; }
-                if (b.label == "SALIR") { m_result = MenuResult::QUIT;  m_done = true; }
+                if (b.label == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
+                if (b.label == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
+                if (b.label == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
             }
         }
     }
@@ -216,16 +214,18 @@ void MainMenu::updateBgAsteroids(float dt) {
     }
 }
 
-/* Renderiza el frame completo del menú. */
-void MainMenu::render() {
-    // Fondo negro base
+/* Dibuja solo el fondo: limpia pantalla, estrellas y asteroides flotantes. */
+void MainMenu::renderBackground() {
     SDL_SetRenderDrawColor(renderer.sdlRenderer(), 2, 5, 15, 255);
     SDL_RenderClear(renderer.sdlRenderer());
-
     drawStarLayers();
     drawBgAsteroids();
-    drawUI();
+}
 
+/* Renderiza el frame completo del menú. */
+void MainMenu::render() {
+    renderBackground();
+    drawUI();
     SDL_RenderPresent(renderer.sdlRenderer());
 }
 
@@ -266,6 +266,10 @@ void MainMenu::drawUI() {
                                  TITLE_SCALE, {0, 80, 120, 180});
     BitmapFont::drawTextCentered(rend, "CANTINA WARS", CX, TITLE_Y,
                                  TITLE_SCALE, {0, 220, 255, 255});
+
+    // Subtítulo pequeño
+    BitmapFont::drawTextCentered(rend, "SURVIVAL IN DEEP SPACE", CX, TITLE_Y + 50,
+                                 1, {100, 160, 200, 200});
 
     // Botones
     for (int i = 0; i < (int)m_buttons.size(); i++)

@@ -6,6 +6,8 @@
  */
 #pragma once
 namespace audio { class MusicSystem; }
+#include "../core/GameConfig.hpp"
+#include "DifficultyScreen.hpp"
 #include <SDL2/SDL.h>
 #include <vector>
 #include "../rendering/Renderer.hpp"
@@ -17,7 +19,7 @@ enum class MenuResult { PLAY, QUIT };
 
 class MainMenu {
 public:
-    MainMenu(audio::MusicSystem& audio, Renderer& renderer);
+    MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config);
     ~MainMenu();
 
     /* Ejecuta el loop del menú y bloquea hasta que el usuario elige. */
@@ -33,6 +35,7 @@ private:
     };
 
     audio::MusicSystem& m_audio;
+    GameConfig&         m_config;
     Renderer&  renderer;
     Camera     camera;
 
@@ -64,6 +67,9 @@ private:
     void drawBgAsteroids();
 
     /* Dibuja el título y todos los botones sobre el fondo. */
+    /* Dibuja solo el fondo dinámico (estrellas + asteroides); usado también por DifficultyScreen. */
+    void renderBackground();
+
     void drawUI();
 
     /* Dibuja un botón individual con su estado visual. */

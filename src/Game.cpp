@@ -8,11 +8,15 @@
 #include <string>
 #include <algorithm>
 
-Game::Game(audio::MusicSystem& audio, Renderer& renderer)
-    : m_audio(audio), renderer(renderer),
+Game::Game(audio::MusicSystem& audio, Renderer& renderer, const GameConfig& config)
+    : m_audio(audio), renderer(renderer), m_config(config),
       m_hud(renderer.width(), renderer.height()),
       m_overlay(renderer.width(), renderer.height()) {
     srand((unsigned)time(nullptr));
+
+    // Aplicar parámetros de dificultad
+    auto params = m_config.params();
+    hyperspace.chargeTime = params.boostChargeTime;
 
     shipMeshHD = GLTFLoader::loadShipMesh("../assets/ship/scene.bin");
     shipMesh   = Ship::createMesh();
@@ -24,7 +28,7 @@ Game::Game(audio::MusicSystem& audio, Renderer& renderer)
     m_audio.preloadSFX("../assets/sounds/explosion.wav");
     m_audio.preloadSFX("../assets/sounds/boost.mp3");
 
-    for (int i = 0; i < 15; i++) spawnAsteroid();
+    for (int i = 0; i < params.baseAsteroidCount; i++) spawnAsteroid();
 }
 
 /* Carga música, lanza la primera oleada y ejecuta el loop hasta que running=false. */
@@ -147,11 +151,13 @@ void Game::update(float dt) {
     spawnTimer -= dt;
     if (spawnTimer <= 0.f) {
         spawnAsteroid();
-        float difficulty = std::min(1.f + (score / 2500.f), 2.5f);
-        spawnTimer = (0.28f / difficulty) + (rand() / (float)RAND_MAX) * 0.12f;
+        float progression = std::min(1.f + (score / 2500.f), 2.5f);
+        float spawnMult = progression * m_config.params().spawnRateMult;
+        spawnTimer = (0.28f / spawnMult) + (rand() / (float)RAND_MAX) * 0.12f;
     }
 
     score += (int)(ship.vel.z * dt * 0.5f);
+    
 }
 
 bool Game::sphereCollide(Vec3 a, float ra, Vec3 b, float rb) {
@@ -213,7 +219,7 @@ void Game::spawnWave() {
 
 /* Delega la generación de asteroides al módulo Spawner. */
 void Game::spawnAsteroid() {
-    Spawner::spawnAsteroids(asteroids, ship.pos, renderMode, wave);
+    Spawner::spawnAsteroids(asteroids, ship.pos, renderMode, wave, m_config.params());
 }
 
 /* Rasteriza nave, asteroides, balas y efectos de velocidad. */
@@ -282,5 +288,5 @@ void Game::restart() {
     asteroids.clear();
     bullets.clear();
     ship.respawn();
-    for (int i = 0; i < 15; i++) spawnAsteroid();
+    for (int i = 0; i < m_config.params().baseAsteroidCount; i++) spawnAsteroid();
 }

@@ -27,7 +27,8 @@ static float radiusFor(AsteroidSize s) {
 }
 
 void spawnAsteroids(std::vector<Asteroid>& asteroids,
-                    Vec3 shipPos, RenderMode mode, int /*wave*/) {
+                    Vec3 shipPos, RenderMode mode, int /*wave*/,
+                    const GameConfig::DifficultyParams& params) {
     constexpr float MIN_SPAWN_Z_AHEAD = 180.f;
     constexpr float SPAWN_Z_RANGE     = 520.f;
     constexpr float R_MIN             = 10.f;
@@ -69,9 +70,9 @@ void spawnAsteroids(std::vector<Asteroid>& asteroids,
             if (tooClose) continue;
 
             Vec3 vel = {
-                ((rand() % 100) - 50) * 0.03f,
-                ((rand() % 100) - 50) * 0.03f,
-                -48.f - (rand() % 30)
+                ((rand() % 100) - 50) * 0.03f * params.asteroidSpeedMult,
+                ((rand() % 100) - 50) * 0.03f * params.asteroidSpeedMult,
+                (-48.f - (rand() % 30)) * params.asteroidSpeedMult
             };
 
             asteroids.emplace_back(spawnPos, vel, size, mode, rand());
@@ -81,7 +82,7 @@ void spawnAsteroids(std::vector<Asteroid>& asteroids,
         // Fallback si el campo está saturado
         if (!placed) {
             Vec3 fallback = { R_MAX, 0.f, shipPos.z + MIN_SPAWN_Z_AHEAD + SPAWN_Z_RANGE };
-            asteroids.emplace_back(fallback, Vec3{0.f, 0.f, -55.f},
+            asteroids.emplace_back(fallback, Vec3{0.f, 0.f, -55.f * params.asteroidSpeedMult},
                                    AsteroidSize::SMALL, mode, rand());
         }
     }

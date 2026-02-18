@@ -2,7 +2,6 @@
  * Game.hpp
  * Coordinador principal del juego. Gestiona el loop, eventos, actualización,
  * colisiones y renderizado. El spawning se delega a Spawner y el boost a HyperspaceSystem.
- * Boost incentivado, si lo usas ganas más puntos, pero más difícil sobrevivir.
  */
 #pragma once
 #include <vector>
@@ -13,6 +12,7 @@
 #include "entities/Asteroid.hpp"
 #include "entities/Bullet.hpp"
 #include "core/HyperspaceSystem.hpp"
+#include "core/GameConfig.hpp"
 #include "ui/HUD.hpp"
 #include "ui/Overlay.hpp"
 
@@ -21,7 +21,7 @@ namespace audio { class MusicSystem; }
 
 class Game {
 public:
-    Game(audio::MusicSystem& audio, Renderer& renderer);
+    Game(audio::MusicSystem& audio, Renderer& renderer, const GameConfig& config);
 
     /* Inicializa renderer y audio, lanza el loop principal. Bloquea hasta que el juego cierra. */
     void run();
@@ -29,6 +29,7 @@ public:
 private:
     audio::MusicSystem& m_audio;
     Renderer&           renderer;
+    GameConfig          m_config;
     Camera              camera;
     Ship                ship;
 
