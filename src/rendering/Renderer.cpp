@@ -31,7 +31,7 @@ Renderer::~Renderer() {
 bool Renderer::init() {
     if (window) return true;
 
-    window = SDL_CreateWindow("Asteroid 3D",
+    window = SDL_CreateWindow("Cantina Wars",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               W, H, SDL_WINDOW_SHOWN);
     if (!window) return false;

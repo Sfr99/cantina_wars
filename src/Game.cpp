@@ -8,7 +8,10 @@
 #include <string>
 #include <algorithm>
 
-Game::Game(audio::MusicSystem& audio, Renderer& renderer) : m_audio(audio), renderer(renderer) {
+Game::Game(audio::MusicSystem& audio, Renderer& renderer)
+    : m_audio(audio), renderer(renderer),
+      m_hud(renderer.width(), renderer.height()),
+      m_overlay(renderer.width(), renderer.height()) {
     srand((unsigned)time(nullptr));
 
     shipMeshHD = GLTFLoader::loadShipMesh("../assets/ship/scene.bin");
@@ -46,17 +49,15 @@ void Game::run() {
 
         hyperspace.update(boostHeld, dt);
         m_dt             = dt;
-        m_hyperIntensity = hyperspace.charge;
+        m_hyperIntensity = hyperspace.visualIntensity();
 
-        // Gestiona el canal de audio del boost (loop mientras activo)
-        const bool isBoosting = hyperspace.charge > 0.1f;
-        if (isBoosting && !m_wasBoosting)
-            m_boostChannel = m_audio.playSFX("../assets/sounds/boost.mp3", -1);
-        else if (!isBoosting && m_wasBoosting && m_boostChannel >= 0) {
+        // Audio del boost: arranca al pulsar SPACE con carga, para al soltar o al vaciarse
+        if (hyperspace.enteredFiring)
+            m_boostChannel = m_audio.playSFX("../assets/sounds/boost.mp3", 0);
+        if (hyperspace.leftFiring && m_boostChannel >= 0) {
             Mix_HaltChannel(m_boostChannel);
             m_boostChannel = -1;
         }
-        m_wasBoosting = isBoosting;
 
         update(dt);
         render();
@@ -254,6 +255,18 @@ void Game::render() {
 
     renderer.updateSpeedLines(m_dt, m_hyperIntensity);
     renderer.drawSpeedLines(m_hyperIntensity);
+
+    // HUD siempre visible durante la partida
+    m_hud.draw(renderer.sdlRenderer(), score, lives,
+               renderMode == RenderMode::HD, hyperspace);
+
+    // Overlay de Game Over encima de todo
+    if (state == GameState::GAME_OVER) {
+        std::string sub = "SCORE  " + std::to_string(score);
+        m_overlay.draw(renderer.sdlRenderer(),
+                       "GAME OVER", sub.c_str(), "PULSA R PARA REINICIAR");
+    }
+
     renderer.present();
 }
 

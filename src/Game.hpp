@@ -12,6 +12,8 @@
 #include "entities/Asteroid.hpp"
 #include "entities/Bullet.hpp"
 #include "core/HyperspaceSystem.hpp"
+#include "ui/HUD.hpp"
+#include "ui/Overlay.hpp"
 
 enum class GameState { PLAYING, GAME_OVER };
 namespace audio { class MusicSystem; }
@@ -40,7 +42,8 @@ private:
     float            m_dt            = 0.f;
     float            m_hyperIntensity = 0.f;
     int              m_boostChannel  = -1;
-    bool             m_wasBoosting   = false;
+    HUD     m_hud;
+    Overlay m_overlay;
 
     int        score       = 0;
     int        lives       = 3;
