@@ -1,37 +1,36 @@
 #include "Asteroid.hpp"
-#include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <vector>
 #include <map>
 #include <array>
-#include <cstdio>
 
-static SDL_Surface* g_dispMaps[7] = {nullptr};
+// Texturas compartidas entre todos los asteroides; cargadas una sola vez.
+static SDL_Surface* g_dispMaps[7]    = {nullptr};
 static SDL_Surface* g_diffuseMaps[7] = {nullptr};
-static int g_dispMapCount = 0;
+static int          g_dispMapCount   = 0;
 
+/* Carga displacement y diffuse maps desde assets/rocks/ la primera vez que se llama. */
 static void loadDisplacementMaps() {
     static bool loaded = false;
     if (loaded) return;
     loaded = true;
 
-   /* if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG) & (IMG_INIT_PNG | IMG_INIT_JPG))) {
-        printf("Warning: IMG_Init failed: %s\n", IMG_GetError());
-        return;
-    }*/
-
     for (int i = 0; i < 7; i++) {
         char dispPath[64], diffPath[64];
-
         snprintf(dispPath, sizeof(dispPath), "../assets/rocks/asteroid_disp_%d.png", i);
+        snprintf(diffPath, sizeof(diffPath), "../assets/rocks/asteroid_diff_%d.png", i);
+
         g_dispMaps[i] = IMG_Load(dispPath);
+
         if (!g_diffuseMaps[i]) {
-            snprintf(diffPath, sizeof(diffPath), "../assets/rocks/asteroid_diff_%d.png", i);
             g_diffuseMaps[i] = IMG_Load(diffPath);
         }
 
+        // Convertir a ARGB8888 para lecturas de píxel consistentes
+        // ARGB8888 es un formato común que facilita el muestreo de píxeles con SDL_MapRGBA
         if (g_diffuseMaps[i]) {
             SDL_Surface* conv = SDL_ConvertSurfaceFormat(g_diffuseMaps[i], SDL_PIXELFORMAT_ARGB8888, 0);
             if (conv) {
@@ -41,38 +40,22 @@ static void loadDisplacementMaps() {
             SDL_SetSurfaceRLE(g_diffuseMaps[i], 0);
         }
 
-        if (g_dispMaps[i]) {
-            g_dispMapCount++;
-            /*printf(" Loaded: %s (%dx%d)", dispPath, g_dispMaps[i]->w, g_dispMaps[i]->h);
-            if (g_diffuseMaps[i]) {
-                printf(" + diffuse (%dx%d)", g_diffuseMaps[i]->w, g_diffuseMaps[i]->h);
-            }
-            printf("\n");*/
-        }
+        if (g_dispMaps[i]) g_dispMapCount++;
     }
-
-    /*if (g_dispMapCount == 0) {
-        printf(" Warning: No displacement maps found\n");
-        printf("   Expected: asteroid_disp_0.png ... asteroid_disp_6.png\n");
-        printf("   Optional: asteroid_diff_0.jpg ... asteroid_diff_6.jpg\n");
-    } else {
-        printf("✓ Total displacement maps loaded: %d\n", g_dispMapCount);
-    }*/
 }
 
-
+/* Muestrea un heightmap en coordenadas UV normalizadas; devuelve valor en [-1, 1]. */
 static float sampleHeightmap(SDL_Surface* map, float u, float v) {
     if (!map) return 0.f;
+
     int x = (int)(u * (map->w - 1)) % map->w;
     int y = (int)((1.0f - v) * (map->h - 1)) % map->h;
     if (x < 0) x += map->w;
     if (y < 0) y += map->h;
 
-    Uint8* pixels = (Uint8*)map->pixels;
-    int bpp = map->format->BytesPerPixel;
-    Uint8* p = pixels + y * map->pitch + x * bpp;
+    Uint8* p   = (Uint8*)map->pixels + y * map->pitch + x * map->format->BytesPerPixel;
+    Uint8  gray = (map->format->BytesPerPixel == 1) ? p[0] : (p[0] + p[1] + p[2]) / 3;
 
-    Uint8 gray = (bpp == 1) ? p[0] : (p[0] + p[1] + p[2]) / 3;
     return (gray / 255.f) * 2.f - 1.f;
 }
 
@@ -101,24 +84,23 @@ Asteroid::Asteroid(Vec3 p, Vec3 v, AsteroidSize sz, RenderMode mode, int seed) {
         ((rand() % 200) - 100) * 0.008f
     };
 
+    // Seleccionar textura disponible para modo HD
     int texIndex = -1;
     if (mode == RenderMode::HD) {
         for (int attempt = 0; attempt < 10 && texIndex < 0; attempt++) {
             int idx = rand() % 7;
-            if (g_dispMaps[idx]) {
-                texIndex = idx;
-                break;
-            }
+            if (g_dispMaps[idx]) texIndex = idx;
         }
         diffuseTexture = (texIndex >= 0) ? g_diffuseMaps[texIndex] : nullptr;
     }
 
     mesh = (mode == RenderMode::HD) ? generateMeshHD(radius, seed, texIndex)
-                                     : generateMeshLowPoly(radius, seed);
+                                    : generateMeshLowPoly(radius, seed);
 }
 
+/* Integra posición y acumula rotación según rotSpeed. */
 void Asteroid::update(float dt) {
-    pos += vel * dt;
+    pos   += vel * dt;
     rot.x += rotSpeed.x * dt;
     rot.y += rotSpeed.y * dt;
     rot.z += rotSpeed.z * dt;
@@ -129,6 +111,7 @@ Mesh Asteroid::generateMeshLowPoly(float radius, int seed) {
 
     const float phi = (1.f + sqrtf(5.f)) * 0.5f;
 
+    // Vértices base del icosaedro
     std::vector<Vec3> raw = {
         { 0,  1,  phi}, { 0, -1,  phi}, { 0,  1, -phi}, { 0, -1, -phi},
         { 1,  phi, 0},  {-1,  phi, 0},  { 1, -phi, 0},  {-1, -phi, 0},
@@ -158,14 +141,16 @@ Mesh Asteroid::generateMeshLowPoly(float radius, int seed) {
     return {verts, edges, {}, {}, {}};
 }
 
-static int subdivideEdge(std::vector<Vec3>& verts, std::map<std::pair<int,int>, int>& cache,
+/* Inserta el punto medio de la arista (a,b) en verts si aún no existe; devuelve su índice. */
+static int subdivideEdge(std::vector<Vec3>& verts,
+                         std::map<std::pair<int,int>, int>& cache,
                          int a, int b) {
     auto key = (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
-    auto it = cache.find(key);
+    auto it  = cache.find(key);
     if (it != cache.end()) return it->second;
 
     Vec3 mid = (verts[a] + verts[b]) * 0.5f;
-    int idx = (int)verts.size();
+    int  idx = (int)verts.size();
     verts.push_back(mid.normalized());
     cache[key] = idx;
     return idx;
@@ -175,12 +160,6 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
     srand((unsigned)(seed * 1337 + 42));
 
     SDL_Surface* dispMap = (texIndex >= 0) ? g_dispMaps[texIndex] : nullptr;
-    
-    /*if (dispMap) {
-        printf("  → Using maps %d for asteroid (seed=%d)\n", texIndex, seed);
-    } else {
-        printf("  → No displacement map, using random perturbation\n");
-    }*/
 
     const float phi = (1.f + sqrtf(5.f)) * 0.5f;
 
@@ -200,7 +179,7 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
         {3,7,11},{4,8,10},{5,11,9},{6,10,8},{7,9,11}
     };
 
-    // Subdividir 2 veces
+    // Dos pasadas de subdivisión para aumentar la resolución de la esfera
     for (int sub = 0; sub < 2; sub++) {
         std::vector<std::array<int,3>> newTris;
         std::map<std::pair<int,int>, int> edgeCache;
@@ -210,7 +189,6 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
             int ab = subdivideEdge(verts, edgeCache, a, b);
             int bc = subdivideEdge(verts, edgeCache, b, c);
             int ca = subdivideEdge(verts, edgeCache, c, a);
-
             newTris.push_back({a, ab, ca});
             newTris.push_back({b, bc, ab});
             newTris.push_back({c, ca, bc});
@@ -219,73 +197,57 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
         tris = newTris;
     }
 
-    // Generar UVs esféricas
+    // Coordenadas UV esféricas por proyección
     std::vector<Vec3> uvs;
     uvs.reserve(verts.size());
     for (auto& v : verts) {
-        float theta = atan2f(v.z, v.x);
-        float phi_angle = asinf(v.y);
-        float u = (theta / (2.f * 3.14159f)) + 0.5f;
-        float v_coord = (phi_angle / 3.14159f) + 0.5f;
-        uvs.push_back({u, v_coord, 0});
+        float theta   = atan2f(v.z, v.x);
+        float phi_ang = asinf(v.y);
+        uvs.push_back({ (theta / (2.f * 3.14159f)) + 0.5f,
+                        (phi_ang / 3.14159f)        + 0.5f,
+                        0.f });
     }
 
-    // Aplicar displacement
+    // Desplazar vértices según heightmap o perturbación aleatoria
     std::vector<float> heights;
     heights.reserve(verts.size());
-    
     for (size_t i = 0; i < verts.size(); i++) {
-        float u = uvs[i].x;
-        float v = uvs[i].y;
-
-        float height = dispMap ? sampleHeightmap(dispMap, u, v)
-                                : ((rand() % 100) / 100.f - 0.5f);
+        float height = dispMap ? sampleHeightmap(dispMap, uvs[i].x, uvs[i].y)
+                               : ((rand() % 100) / 100.f - 0.5f);
         heights.push_back(height);
-        
-        float disp = radius * (1.f + height * 0.35f);
-        verts[i] = verts[i] * disp;
+        verts[i] = verts[i] * (radius * (1.f + height * 0.35f));
     }
 
-    // Calcular colores por altura (fallback)
+    // Colorear vértices según altura relativa (oscuro=valle, claro=pico)
     float minH = 1e9f, maxH = -1e9f;
     for (float h : heights) {
         if (h < minH) minH = h;
         if (h > maxH) maxH = h;
     }
-    
+
     std::vector<SDL_Color> colors;
     colors.reserve(verts.size());
-    
     for (float h : heights) {
         float t = (maxH > minH) ? (h - minH) / (maxH - minH) : 0.5f;
-        
         SDL_Color col;
         if (t < 0.33f) {
             float s = t / 0.33f;
-            col.r = (Uint8)(50  + s * 60);
-            col.g = (Uint8)(30  + s * 40);
-            col.b = (Uint8)(20  + s * 20);
+            col = { (Uint8)(50 + s*60), (Uint8)(30 + s*40), (Uint8)(20 + s*20), 255 };
         } else if (t < 0.66f) {
             float s = (t - 0.33f) / 0.33f;
-            col.r = (Uint8)(110 + s * 50);
-            col.g = (Uint8)(70  + s * 60);
-            col.b = (Uint8)(40  + s * 50);
+            col = { (Uint8)(110 + s*50), (Uint8)(70 + s*60), (Uint8)(40 + s*50), 255 };
         } else {
             float s = (t - 0.66f) / 0.34f;
-            col.r = (Uint8)(160 + s * 95);
-            col.g = (Uint8)(130 + s * 100);
-            col.b = (Uint8)(90  + s * 60);
+            col = { (Uint8)(160 + s*95), (Uint8)(130 + s*100), (Uint8)(90 + s*60), 255 };
         }
-        col.a = 255;
         colors.push_back(col);
     }
 
-    // Extraer aristas únicas
+    // Extraer aristas únicas a partir de los triángulos
     std::map<std::pair<int,int>, bool> edgeSet;
     for (auto& tri : tris) {
         auto addEdge = [&](int a, int b) {
-            auto key = (a < b) ? std::make_pair(a,b) : std::make_pair(b,a);
-            edgeSet[key] = true;
+            edgeSet[(a < b) ? std::make_pair(a,b) : std::make_pair(b,a)] = true;
         };
         addEdge(tri[0], tri[1]);
         addEdge(tri[1], tri[2]);
@@ -294,16 +256,13 @@ Mesh Asteroid::generateMeshHD(float radius, int seed, int texIndex) {
 
     std::vector<Edge> edges;
     edges.reserve(edgeSet.size());
-    for (auto& [key, _] : edgeSet) {
+    for (auto& [key, _] : edgeSet)
         edges.push_back({key.first, key.second});
-    }
 
-    // Convertir triangulos a struct Triangle
     std::vector<Triangle> triangles;
     triangles.reserve(tris.size());
-    for (auto& t : tris) {
+    for (auto& t : tris)
         triangles.push_back({t[0], t[1], t[2]});
-    }
 
     return {verts, edges, triangles, uvs, colors};
 }
