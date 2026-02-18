@@ -32,7 +32,7 @@ void MainMenu::buildButtons() {
         {"JUGAR",          true },
         {"DIFICULTAD",     true },
         {"RANKING",        true },
-        {"CONFIGURACION",  false},
+        {"COMO JUGAR",     true },
         {"SALIR",          true },
     };
 
@@ -154,7 +154,8 @@ void MainMenu::handleEvents() {
                     if      (lbl == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
                     else if (lbl == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
                     else if (lbl == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
-                    else if (lbl == "RANKING")      { RankingScreen rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
+                    else if (lbl == "RANKING")      { RankingScreen    rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
+                    else if (lbl == "COMO JUGAR")  { HowToPlayScreen hs(renderer, [this]{ renderBackground(); }); hs.run(); }
                     break;
             }
         }
@@ -179,7 +180,8 @@ void MainMenu::handleEvents() {
                 if (b.label == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
                 if (b.label == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
                 if (b.label == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
-                if (b.label == "RANKING")      { RankingScreen rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
+                if (b.label == "RANKING")      { RankingScreen    rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
+                if (b.label == "COMO JUGAR")  { HowToPlayScreen hs(renderer, [this]{ renderBackground(); }); hs.run(); }
             }
         }
     }

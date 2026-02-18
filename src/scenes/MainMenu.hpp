@@ -10,6 +10,8 @@ namespace audio { class MusicSystem; }
 #include "../core/RankingSystem.hpp"
 #include "DifficultyScreen.hpp"
 #include "RankingScreen.hpp"
+#include "HowToPlayScreen.hpp"
+#include "HowToPlayScreen.hpp"
 #include <SDL2/SDL.h>
 #include <vector>
 #include "../rendering/Renderer.hpp"

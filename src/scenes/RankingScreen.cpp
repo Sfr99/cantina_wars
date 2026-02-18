@@ -133,7 +133,7 @@ void RankingScreen::render() {
 
             // Etiqueta NEW en el resaltado
             if (isNew) {
-                BitmapFont::drawText(rend, "NEW", PANEL_X + PANEL_W - 52,
+                BitmapFont::drawText(rend, "NEW", PANEL_X + 12,
                                      rowY + 8, 1, {0, 240, 255, 255});
             }
         } else {

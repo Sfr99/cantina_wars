@@ -191,7 +191,6 @@ void Game::update(float dt) {
     }
     if (m_highScoreBannerT > 0.f) m_highScoreBannerT -= dt;
 
-    updateHUD();
 }
 
 bool Game::sphereCollide(Vec3 a, float ra, Vec3 b, float rb) {
@@ -319,7 +318,7 @@ void Game::render() {
     renderer.present();
 }
 
-/* Actualiza el título de la ventana con puntuación, vidas y modo actual. */
+/* Actualiza el título de la ventana con puntuación, vidas y modo actual. NO USAR, SOLO DEBUG */
 void Game::updateHUD() {
     const char* mode = (renderMode == RenderMode::HD) ? "HD" : "LOW_POLY";
     renderer.setWindowTitle(
@@ -349,10 +348,11 @@ void Game::enterGameOver() {
         state          = GameState::NAME_ENTRY;
         m_nameCursor   = 0;
         m_nameEntry[0] = m_nameEntry[1] = m_nameEntry[2] = 'A';
-        m_audio.playSFX("../assets/sounds/new_high_score.wav");
+        m_audio.playSFX("../assets/sounds/victory.wav");
     } else {
         state = GameState::GAME_OVER;
         m_audio.playSFX("../assets/sounds/explosion.ogg");
+        m_audio.playSFX("../assets/sounds/lose.wav");
     }
     renderer.setWindowTitle("GAME OVER | Score: " + std::to_string(score));
 }
