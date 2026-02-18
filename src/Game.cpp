@@ -151,9 +151,7 @@ void Game::update(float dt) {
         spawnTimer = (0.28f / difficulty) + (rand() / (float)RAND_MAX) * 0.12f;
     }
 
-    // puntuación en función de la velocidad hacia adelante (más puntos cuanto más rápido vas, incentivando el boost)
     score += (int)(ship.vel.z * dt * 0.5f);
-    printf("Score: %d\r", score);
 }
 
 bool Game::sphereCollide(Vec3 a, float ra, Vec3 b, float rb) {
@@ -253,6 +251,9 @@ void Game::render() {
         else
             renderer.drawMesh(bulletMesh, b.worldTransform(), view, {255, 255, 50, 255});
     }
+
+    // Subir pixel buffer a GPU de una sola vez (todos los meshes rellenos ya escritos)
+    renderer.flushPixelBuffer();
 
     renderer.updateSpeedLines(m_dt, m_hyperIntensity);
     renderer.drawSpeedLines(m_hyperIntensity);

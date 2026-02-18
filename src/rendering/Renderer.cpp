@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <vector>
 
 Renderer::Renderer(int w, int h) : W(w), H(h) {}
 
@@ -21,17 +20,18 @@ static SDL_Surface* convertToARGB8888(SDL_Surface* s) {
 }
 
 Renderer::~Renderer() {
-    if (backgroundTexture) SDL_DestroyTexture(backgroundTexture);
-    if (sdlRend)           SDL_DestroyRenderer(sdlRend);
-    if (window)            SDL_DestroyWindow(window);
+    if (m_pixelBuf)         SDL_FreeSurface(m_pixelBuf);
+    if (m_pixelTex)         SDL_DestroyTexture(m_pixelTex);
+    if (backgroundTexture)  SDL_DestroyTexture(backgroundTexture);
+    if (sdlRend)            SDL_DestroyRenderer(sdlRend);
+    if (window)             SDL_DestroyWindow(window);
 }
 
-/* Crea ventana y renderer SDL, carga el fondo y genera el campo de estrellas.
-   Idempotente: no hace nada si ya fue inicializado. */
+/* Crea ventana, renderer, pixel buffer y textura streaming. Idempotente. */
 bool Renderer::init() {
     if (window) return true;
 
-    window = SDL_CreateWindow("Cantina Wars",
+    window = SDL_CreateWindow("Asteroid 3D",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               W, H, SDL_WINDOW_SHOWN);
     if (!window) return false;
@@ -42,6 +42,16 @@ bool Renderer::init() {
 
     SDL_SetRenderDrawBlendMode(sdlRend, SDL_BLENDMODE_BLEND);
 
+    // Pixel buffer CPU: escritura directa sin overhead SDL por píxel
+    m_pixelBuf = SDL_CreateRGBSurface(0, W, H, 32,
+                                      0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+    if (!m_pixelBuf) return false;
+
+    // Textura streaming: destino de la subida GPU una vez por frame
+    m_pixelTex = SDL_CreateTexture(sdlRend, SDL_PIXELFORMAT_ARGB8888,
+                                   SDL_TEXTUREACCESS_STREAMING, W, H);
+    if (!m_pixelTex) return false;
+
     SDL_Surface* bg = convertToARGB8888(IMG_Load("../assets/space.png"));
     if (bg) {
         backgroundTexture = SDL_CreateTextureFromSurface(sdlRend, bg);
@@ -49,12 +59,10 @@ bool Renderer::init() {
     }
 
     generateStars(300);
-
     zbuf.assign(W * H, 1e9f);
     return true;
 }
 
-/* Rellena el array de estrellas con posiciones y brillos aleatorios. */
 void Renderer::generateStars(int count) {
     stars.clear();
     for (int i = 0; i < count; i++) {
@@ -66,7 +74,6 @@ void Renderer::generateStars(int count) {
     }
 }
 
-/* Renderiza el campo de estrellas como puntos grises sobre fondo negro. */
 void Renderer::drawStars() {
     for (const auto& s : stars) {
         SDL_SetRenderDrawColor(sdlRend, s.brightness, s.brightness, s.brightness, 255);
@@ -74,7 +81,7 @@ void Renderer::drawStars() {
     }
 }
 
-/* Limpia color y z-buffer; muestra fondo de textura en modo HD o estrellas en LOW_POLY. */
+/* Limpia renderer SDL, pixel buffer (memset) y z-buffer. */
 void Renderer::clear(bool hdMode) {
     SDL_SetRenderDrawColor(sdlRend, 0, 0, 0, 255);
     SDL_RenderClear(sdlRend);
@@ -84,7 +91,19 @@ void Renderer::clear(bool hdMode) {
     else
         drawStars();
 
+    // Limpiar pixel buffer: todos los píxeles a negro transparente
+    SDL_LockSurface(m_pixelBuf);
+    memset(m_pixelBuf->pixels, 0, (size_t)H * m_pixelBuf->pitch);
+    SDL_UnlockSurface(m_pixelBuf);
+
     std::fill(zbuf.begin(), zbuf.end(), 1e9f);
+}
+
+/* Sube el pixel buffer a GPU en una sola operación y lo vuelca sobre el renderer. */
+void Renderer::flushPixelBuffer() {
+    SDL_UpdateTexture(m_pixelTex, nullptr, m_pixelBuf->pixels, m_pixelBuf->pitch);
+    SDL_SetTextureBlendMode(m_pixelTex, SDL_BLENDMODE_BLEND);
+    SDL_RenderCopy(sdlRend, m_pixelTex, nullptr, nullptr);
 }
 
 void Renderer::present() {
@@ -95,7 +114,6 @@ void Renderer::setWindowTitle(const std::string& title) {
     SDL_SetWindowTitle(window, title.c_str());
 }
 
-/* Proyecta vp (espacio cámara) a píxeles de pantalla; devuelve false si está detrás del near. */
 bool Renderer::projectPoint(Vec3 vp, float& sx, float& sy) const {
     if (vp.z < NEAR) return false;
     sx =  (vp.x / vp.z) * FOV + W * 0.5f;
@@ -103,7 +121,6 @@ bool Renderer::projectPoint(Vec3 vp, float& sx, float& sy) const {
     return true;
 }
 
-/* Recorta el segmento [a,b] contra el plano z=NEAR; devuelve false si queda completamente detrás. */
 bool Renderer::clipLine(Vec3& a, Vec3& b) const {
     if (a.z < NEAR && b.z < NEAR) return false;
     if (a.z < NEAR) {
@@ -116,7 +133,6 @@ bool Renderer::clipLine(Vec3& a, Vec3& b) const {
     return true;
 }
 
-/* Transforma, proyecta y dibuja las aristas de la malla; usa color por vértice si está disponible. */
 void Renderer::drawMesh(const Mesh& mesh, const Mat4& transform,
                         const Mat4& view, SDL_Color color) {
     std::vector<Vec3> viewVerts(mesh.verts.size());
@@ -143,16 +159,14 @@ void Renderer::drawMesh(const Mesh& mesh, const Mat4& transform,
             SDL_Color c1 = mesh.colors[edge.a];
             SDL_Color c2 = mesh.colors[edge.b];
             SDL_SetRenderDrawColor(sdlRend,
-                (c1.r + c2.r) / 2, (c1.g + c2.g) / 2, (c1.b + c2.b) / 2, 255);
+                (c1.r+c2.r)/2, (c1.g+c2.g)/2, (c1.b+c2.b)/2, 255);
         } else {
             SDL_SetRenderDrawColor(sdlRend, color.r, color.g, color.b, color.a);
         }
-
         SDL_RenderDrawLine(sdlRend, (int)sx1, (int)sy1, (int)sx2, (int)sy2);
     }
 }
 
-/* Muestrea la textura ARGB8888 en UV con wrap y flip-V; devuelve blanco si no es ARGB8888. */
 Uint32 Renderer::sampleTexture(SDL_Surface* tex, float u, float v) const {
     if (!tex) return 0xFFFFFFFF;
     if (!tex->format || tex->format->format != SDL_PIXELFORMAT_ARGB8888)
@@ -167,11 +181,10 @@ Uint32 Renderer::sampleTexture(SDL_Surface* tex, float u, float v) const {
     if (SDL_MUSTLOCK(tex)) SDL_LockSurface(tex);
     Uint32 color = *((const Uint32*)((const Uint8*)tex->pixels + y * tex->pitch) + x);
     if (SDL_MUSTLOCK(tex)) SDL_UnlockSurface(tex);
-
     return color;
 }
 
-/* Rasteriza un triángulo en pantalla con interpolación baricéntrica; aplica textura o color plano. */
+/* Escribe el triángulo directamente en m_pixelBuf; sin llamadas SDL por píxel. */
 void Renderer::drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
                             Vec3 uv0, Vec3 uv1, Vec3 uv2,
                             SDL_Surface* texture, SDL_Color flatColor) {
@@ -180,21 +193,25 @@ void Renderer::drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
     int minY = std::max(0,     (int)std::min({p0.y, p1.y, p2.y}));
     int maxY = std::min(H - 1, (int)std::max({p0.y, p1.y, p2.y}));
 
-    float area = (p1.x - p0.x) * (p2.y - p0.y) - (p2.x - p0.x) * (p1.y - p0.y);
+    float area = (p1.x-p0.x)*(p2.y-p0.y) - (p2.x-p0.x)*(p1.y-p0.y);
     if (fabsf(area) < 1e-6f) return;
 
-    for (int y = minY; y <= maxY; y++) {
-        for (int x = minX; x <= maxX; x++) {
-            float px = x + 0.5f;
-            float py = y + 0.5f;
+    // Puntero base al pixel buffer; pitch en bytes, no en píxeles
+    Uint8* bufBase = (Uint8*)m_pixelBuf->pixels;
+    const int pitch = m_pixelBuf->pitch;
 
-            float w0 = ((p1.x - px) * (p2.y - py) - (p2.x - px) * (p1.y - py)) / area;
-            float w1 = ((p2.x - px) * (p0.y - py) - (p0.x - px) * (p2.y - py)) / area;
+    for (int y = minY; y <= maxY; y++) {
+        Uint32* row = (Uint32*)(bufBase + y * pitch);
+        for (int x = minX; x <= maxX; x++) {
+            float px = x + 0.5f, py = y + 0.5f;
+
+            float w0 = ((p1.x-px)*(p2.y-py) - (p2.x-px)*(p1.y-py)) / area;
+            float w1 = ((p2.x-px)*(p0.y-py) - (p0.x-px)*(p2.y-py)) / area;
             float w2 = 1.0f - w0 - w1;
 
             if (w0 < 0 || w1 < 0 || w2 < 0) continue;
 
-            float z = w0 * p0.z + w1 * p1.z + w2 * p2.z;
+            float z = w0*p0.z + w1*p1.z + w2*p2.z;
             if (z < NEAR) continue;
 
             const int idx = y * W + x;
@@ -203,29 +220,27 @@ void Renderer::drawTriangle(Vec3 p0, Vec3 p1, Vec3 p2,
 
             Uint8 r, g, b;
             if (texture) {
-                float u = w0 * uv0.x + w1 * uv1.x + w2 * uv2.x;
-                float v = w0 * uv0.y + w1 * uv1.y + w2 * uv2.y;
-                Uint32 texColor = sampleTexture(texture, u, v);
-                SDL_GetRGB(texColor, texture->format, &r, &g, &b);
+                float u = w0*uv0.x + w1*uv1.x + w2*uv2.x;
+                float v = w0*uv0.y + w1*uv1.y + w2*uv2.y;
+                Uint32 tc = sampleTexture(texture, u, v);
+                SDL_GetRGB(tc, texture->format, &r, &g, &b);
             } else {
-                r = flatColor.r;
-                g = flatColor.g;
-                b = flatColor.b;
+                r = flatColor.r; g = flatColor.g; b = flatColor.b;
             }
 
-            SDL_SetRenderDrawColor(sdlRend, r, g, b, 255);
-            SDL_RenderDrawPoint(sdlRend, x, y);
+            // Escritura directa: 0xFF000000 = alpha=255
+            row[x] = 0xFF000000 | ((Uint32)r << 16) | ((Uint32)g << 8) | b;
         }
     }
 }
 
-/* Proyecta todos los vértices y rasteriza los triángulos con color plano o por vértice. */
+/* Proyecta vértices, aplica backface culling en espacio cámara y rasteriza. */
 void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
                               const Mat4& view, SDL_Surface* texture) {
     if (mesh.tris.empty()) return;
 
-    std::vector<Vec3> screenVerts(mesh.verts.size());
     std::vector<Vec3> viewVerts(mesh.verts.size());
+    std::vector<Vec3> screenVerts(mesh.verts.size());
 
     for (size_t i = 0; i < mesh.verts.size(); i++) {
         const Vec3& v = mesh.verts[i];
@@ -239,10 +254,17 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
                        : Vec3{-9999.f, -9999.f, -9999.f};
     }
 
+    SDL_LockSurface(m_pixelBuf);
+
     for (const auto& tri : mesh.tris) {
         Vec3 v0 = viewVerts[tri.a];
         Vec3 v1 = viewVerts[tri.b];
         Vec3 v2 = viewVerts[tri.c];
+
+        // Backface culling en espacio cámara:
+        // si la normal apunta en la misma dirección que el vector cámara→cara, es dorso
+        Vec3 normal = (v1 - v0).cross(v2 - v0);
+        if (normal.dot(v0) >= 0) continue;
 
         if (v0.z < NEAR && v1.z < NEAR && v2.z < NEAR) continue;
 
@@ -261,108 +283,84 @@ void Renderer::drawFilledMesh(const Mesh& mesh, const Mat4& transform,
             SDL_Color c1 = mesh.colors[tri.b];
             SDL_Color c2 = mesh.colors[tri.c];
             flatCol = {
-                (Uint8)((c0.r + c1.r + c2.r) / 3),
-                (Uint8)((c0.g + c1.g + c2.g) / 3),
-                (Uint8)((c0.b + c1.b + c2.b) / 3),
+                (Uint8)((c0.r+c1.r+c2.r)/3),
+                (Uint8)((c0.g+c1.g+c2.g)/3),
+                (Uint8)((c0.b+c1.b+c2.b)/3),
                 255
             };
         }
 
         drawTriangle(p0, p1, p2, uv0, uv1, uv2, texture, flatCol);
     }
+
+    SDL_UnlockSurface(m_pixelBuf);
 }
 
 static float frand01() { return (float)(rand() % 10000) / 10000.f; }
 
-/* Añade nuevas líneas de velocidad y avanza las existentes; elimina las expiradas o fuera de pantalla. */
 void Renderer::updateSpeedLines(float dt, float intensity) {
     intensity = std::max(0.f, std::min(1.f, intensity));
 
-    const float cx = W * 0.5f;
-    const float cy = H * 0.5f;
-
+    const float cx = W * 0.5f, cy = H * 0.5f;
     const int   targetCount = (int)(intensity * 90.f);
     const float baseSpeed   = 400.f + intensity * 2400.f;
 
     while ((int)streaks.size() < targetCount) {
         const float deadR  = 70.f;
         const float outerR = deadR + (30.f + intensity * 60.f);
-
         float ang = frand01() * 6.28318530718f;
         float r   = sqrtf(frand01() * (outerR*outerR - deadR*deadR) + deadR*deadR);
-
-        float dx = cosf(ang), dy = sinf(ang);
-
+        float dx  = cosf(ang), dy = sinf(ang);
         SpeedStreak s{};
-        s.x    = cx + dx * r;
-        s.y    = cy + dy * r;
-        s.vx   = dx * baseSpeed;
-        s.vy   = dy * baseSpeed;
-        s.life = 0.25f + frand01() * 0.35f;
-        s.len  = 10.f + intensity * 60.f + frand01() * 25.f;
+        s.x = cx + dx*r; s.y = cy + dy*r;
+        s.vx = dx*baseSpeed; s.vy = dy*baseSpeed;
+        s.life = 0.25f + frand01()*0.35f;
+        s.len  = 10.f + intensity*60.f + frand01()*25.f;
         streaks.push_back(s);
     }
 
-    for (auto& s : streaks) {
-        s.x    += s.vx * dt;
-        s.y    += s.vy * dt;
-        s.life -= dt;
-    }
+    for (auto& s : streaks) { s.x += s.vx*dt; s.y += s.vy*dt; s.life -= dt; }
 
     streaks.erase(
         std::remove_if(streaks.begin(), streaks.end(),
             [&](const SpeedStreak& s) {
                 return s.life <= 0.f
-                    || s.x < -50.f || s.x > W + 50.f
-                    || s.y < -50.f || s.y > H + 50.f;
+                    || s.x < -50.f || s.x > W+50.f
+                    || s.y < -50.f || s.y > H+50.f;
             }),
-        streaks.end()
-    );
+        streaks.end());
 
     if (targetCount == 0) streaks.clear();
 }
 
-/* Devuelve true si el segmento (x0,y0)-(x1,y1) intersecta el círculo (cx,cy,r). */
 static bool segmentHitsCircle(float x0, float y0, float x1, float y1,
                               float cx, float cy, float r) {
-    float vx = x1 - x0, vy = y1 - y0;
-    float wx = cx - x0, wy = cy - y0;
+    float vx = x1-x0, vy = y1-y0;
+    float wx = cx-x0, wy = cy-y0;
     float vv = vx*vx + vy*vy;
-
-    float t = (vv < 1e-6f) ? 0.f
-                            : std::max(0.f, std::min(1.f, (wx*vx + wy*vy) / vv));
-    float px = x0 + t * vx;
-    float py = y0 + t * vy;
-    float dx = px - cx, dy = py - cy;
+    float t  = (vv < 1e-6f) ? 0.f : std::max(0.f, std::min(1.f, (wx*vx+wy*vy)/vv));
+    float dx = x0+t*vx-cx, dy = y0+t*vy-cy;
     return (dx*dx + dy*dy) <= r*r;
 }
 
-/* Dibuja las líneas de velocidad activas; omite las que solapan la zona central. */
 void Renderer::drawSpeedLines(float intensity) {
     if (intensity <= 0.01f) return;
     intensity = std::max(0.f, std::min(1.f, intensity));
 
-    const float deadR  = 70.f;
-    const float deadR2 = deadR * deadR;
-    const float cx = W * 0.5f;
-    const float cy = H * 0.5f;
+    const float deadR  = 70.f, deadR2 = deadR*deadR;
+    const float cx = W*0.5f, cy = H*0.5f;
 
-    const Uint8 alpha = (Uint8)(30 + intensity * 180);
-    SDL_SetRenderDrawColor(sdlRend, 255, 255, 255, alpha);
+    SDL_SetRenderDrawColor(sdlRend, 255, 255, 255, (Uint8)(30 + intensity*180));
 
     for (const auto& s : streaks) {
-        float dxC = s.x - cx, dyC = s.y - cy;
+        float dxC = s.x-cx, dyC = s.y-cy;
         if (dxC*dxC + dyC*dyC < deadR2) continue;
 
         float inv = 1.f / (sqrtf(s.vx*s.vx + s.vy*s.vy) + 1e-6f);
-        float dx = s.vx * inv;
-        float dy = s.vy * inv;
-
-        float x0 = s.x,          y0 = s.y;
-        float x1 = s.x - dx * s.len, y1 = s.y - dy * s.len;
+        float x0 = s.x,             y0 = s.y;
+        float x1 = s.x-s.vx*inv*s.len, y1 = s.y-s.vy*inv*s.len;
 
         if (segmentHitsCircle(x0, y0, x1, y1, cx, cy, deadR)) continue;
-
         SDL_RenderDrawLine(sdlRend, (int)x0, (int)y0, (int)x1, (int)y1);
     }
 }
