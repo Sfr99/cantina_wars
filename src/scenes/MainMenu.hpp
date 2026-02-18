@@ -7,7 +7,9 @@
 #pragma once
 namespace audio { class MusicSystem; }
 #include "../core/GameConfig.hpp"
+#include "../core/RankingSystem.hpp"
 #include "DifficultyScreen.hpp"
+#include "RankingScreen.hpp"
 #include <SDL2/SDL.h>
 #include <vector>
 #include "../rendering/Renderer.hpp"
@@ -19,7 +21,8 @@ enum class MenuResult { PLAY, QUIT };
 
 class MainMenu {
 public:
-    MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config);
+    MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config,
+             RankingSystem& ranking);
     ~MainMenu();
 
     /* Ejecuta el loop del menú y bloquea hasta que el usuario elige. */
@@ -36,6 +39,7 @@ private:
 
     audio::MusicSystem& m_audio;
     GameConfig&         m_config;
+    RankingSystem&      m_ranking;
     Renderer&  renderer;
     Camera     camera;
 

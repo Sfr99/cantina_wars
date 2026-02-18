@@ -15,8 +15,9 @@ static constexpr int BTN_H      = 48;
 static constexpr int BTN_GAP    = 16;
 static constexpr int BTN_START_Y = 230;
 
-MainMenu::MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config)
-    : m_audio(audio), renderer(renderer), m_config(config)
+MainMenu::MainMenu(audio::MusicSystem& audio, Renderer& renderer, GameConfig& config,
+                     RankingSystem& ranking)
+    : m_audio(audio), renderer(renderer), m_config(config), m_ranking(ranking)
 {
     buildButtons();
     initBackground();
@@ -30,7 +31,7 @@ void MainMenu::buildButtons() {
     const Def defs[] = {
         {"JUGAR",          true },
         {"DIFICULTAD",     true },
-        {"RANKING",        false},
+        {"RANKING",        true },
         {"CONFIGURACION",  false},
         {"SALIR",          true },
     };
@@ -153,6 +154,7 @@ void MainMenu::handleEvents() {
                     if      (lbl == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
                     else if (lbl == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
                     else if (lbl == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
+                    else if (lbl == "RANKING")      { RankingScreen rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
                     break;
             }
         }
@@ -177,6 +179,7 @@ void MainMenu::handleEvents() {
                 if (b.label == "JUGAR")       { m_result = MenuResult::PLAY; m_done = true; }
                 if (b.label == "SALIR")       { m_result = MenuResult::QUIT; m_done = true; }
                 if (b.label == "DIFICULTAD")  { DifficultyScreen ds(renderer, m_config, [this]{ renderBackground(); }); ds.run(); }
+                if (b.label == "RANKING")      { RankingScreen rs(renderer, m_ranking, [this]{ renderBackground(); }); rs.run(); }
             }
         }
     }

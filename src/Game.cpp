@@ -1,4 +1,6 @@
 #include "Game.hpp"
+#include "scenes/RankingScreen.hpp"
+#include "ui/BitmapFont.hpp"
 #include "entities/Spawner.hpp"
 #include "audio/music.hpp"
 #include <SDL2/SDL_mixer.h>
@@ -8,11 +10,15 @@
 #include <string>
 #include <algorithm>
 
-Game::Game(audio::MusicSystem& audio, Renderer& renderer, const GameConfig& config)
-    : m_audio(audio), renderer(renderer), m_config(config),
+Game::Game(audio::MusicSystem& audio, Renderer& renderer, const GameConfig& config,
+             RankingSystem& ranking)
+    : m_audio(audio), renderer(renderer), m_config(config), m_ranking(ranking),
       m_hud(renderer.width(), renderer.height()),
       m_overlay(renderer.width(), renderer.height()) {
     srand((unsigned)time(nullptr));
+
+    // Guardar top score actual para detectar superación durante la partida
+    m_prevTopScore = m_ranking.entries().empty() ? 0 : m_ranking.entries()[0].score;
 
     // Aplicar parámetros de dificultad
     auto params = m_config.params();
@@ -24,9 +30,12 @@ Game::Game(audio::MusicSystem& audio, Renderer& renderer, const GameConfig& conf
     Bullet::laserTexture = Bullet::createLaserTexture();
 
     m_audio.init();
-    m_audio.preloadSFX("../assets/sounds/laser.mp3");
-    m_audio.preloadSFX("../assets/sounds/explosion.wav");
-    m_audio.preloadSFX("../assets/sounds/boost.mp3");
+    m_audio.preloadSFX("../assets/sounds/laser.ogg");
+    m_audio.preloadSFX("../assets/sounds/explosion.ogg");
+    m_audio.preloadSFX("../assets/sounds/boost.ogg");
+    m_audio.preloadSFX("../assets/sounds/new_high_score.wav");
+    m_audio.preloadSFX("../assets/sounds/victory.wav");
+    m_audio.preloadSFX("../assets/sounds/lose.wav");
 
     for (int i = 0; i < params.baseAsteroidCount; i++) spawnAsteroid();
 }
@@ -57,7 +66,7 @@ void Game::run() {
 
         // Audio del boost: arranca al pulsar SPACE con carga, para al soltar o al vaciarse
         if (hyperspace.enteredFiring)
-            m_boostChannel = m_audio.playSFX("../assets/sounds/boost.mp3", 0);
+            m_boostChannel = m_audio.playSFX("../assets/sounds/boost.ogg", 0);
         if (hyperspace.leftFiring && m_boostChannel >= 0) {
             Mix_HaltChannel(m_boostChannel);
             m_boostChannel = -1;
@@ -73,6 +82,7 @@ void Game::handleEvents() {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) { running = false; return; }
+        if (state == GameState::NAME_ENTRY) { handleNameEntryEvent(e); continue; }
         if (e.type != SDL_KEYDOWN) continue;
 
         switch (e.key.keysym.sym) {
@@ -82,6 +92,11 @@ void Game::handleEvents() {
 
             case SDLK_r:
                 if (state == GameState::GAME_OVER) restart();
+                break;
+
+            case SDLK_RETURN:
+            case SDLK_KP_ENTER:
+                if (state == GameState::NAME_ENTRY) submitScore();
                 break;
 
             case SDLK_t:
@@ -109,6 +124,16 @@ void Game::handleEvents() {
 void Game::update(float dt) {
     if (state == GameState::GAME_OVER) return;
 
+    // En NAME_ENTRY solo avanzan los asteroides; la nave desaparece y no hay colisiones
+    if (state == GameState::NAME_ENTRY) {
+        for (auto& a : asteroids) a.update(dt);
+        asteroids.erase(
+            std::remove_if(asteroids.begin(), asteroids.end(),
+                [this](const Asteroid& a) { return a.pos.z < ship.pos.z - 30.f; }),
+            asteroids.end());
+        return;
+    }
+
     const Uint8* keys = SDL_GetKeyboardState(nullptr);
     ship.setSpeedMultiplier(hyperspace.speedMultiplier());
     ship.handleInput(keys, dt);
@@ -119,7 +144,7 @@ void Game::update(float dt) {
         Vec3 bpos = ship.pos + Vec3{0.f, 0.f, 2.5f};
         Vec3 bvel = {0.f, 0.f, ship.vel.z + MUZZLE_SPEED};
         bullets.emplace_back(bpos, bvel);
-        m_audio.playSFX("../assets/sounds/laser.mp3");
+        m_audio.playSFX("../assets/sounds/laser.ogg");
     }
 
     for (auto& a : asteroids) a.update(dt);
@@ -157,7 +182,16 @@ void Game::update(float dt) {
     }
 
     score += (int)(ship.vel.z * dt * 0.5f);
-    
+
+    // Detectar nuevo high score durante la partida
+    if (!m_newHighScore && score > m_prevTopScore && score > 0) {
+        m_newHighScore     = true;
+        m_highScoreBannerT = 4.0f;
+        m_audio.playSFX("../assets/sounds/new_high_score.wav");
+    }
+    if (m_highScoreBannerT > 0.f) m_highScoreBannerT -= dt;
+
+    updateHUD();
 }
 
 bool Game::sphereCollide(Vec3 a, float ra, Vec3 b, float rb) {
@@ -191,13 +225,11 @@ void Game::checkCollisions() {
             if (!sphereCollide(ship.pos, 1.5f, a.pos, a.radius)) continue;
 
             a.alive = false;
-            m_audio.playSFX("../assets/sounds/explosion.wav");
+            m_audio.playSFX("../assets/sounds/explosion.ogg");
             lives--;
 
             if (lives <= 0) {
-                state = GameState::GAME_OVER;
-                renderer.setWindowTitle("GAME OVER | Score: " + std::to_string(score)
-                                        + " | Pulsa R para reiniciar");
+                enterGameOver();
             } else {
                 ship.respawn();
             }
@@ -229,8 +261,9 @@ void Game::render() {
     camera.follow(ship.pos, ship.fwd, ship.up);
     Mat4 view = camera.viewMatrix();
 
-    // La nave parpadea mientras es invencible
-    const bool drawShip = !ship.invincible || ((SDL_GetTicks() / 120) % 2 == 0);
+    // La nave parpadea mientras es invencible; no se dibuja en NAME_ENTRY
+    const bool drawShip = state != GameState::NAME_ENTRY &&
+                          (!ship.invincible || ((SDL_GetTicks() / 120) % 2 == 0));
     if (ship.alive && drawShip) {
         if (renderMode == RenderMode::HD) {
             Mat4 hdTransform = ship.worldTransform() * Mat4::rotationX(-1.5708f);
@@ -268,14 +301,33 @@ void Game::render() {
     m_hud.draw(renderer.sdlRenderer(), score, lives,
                renderMode == RenderMode::HD, hyperspace);
 
-    // Overlay de Game Over encima de todo
+    // Overlays según estado
     if (state == GameState::GAME_OVER) {
         std::string sub = "SCORE  " + std::to_string(score);
         m_overlay.draw(renderer.sdlRenderer(),
                        "GAME OVER", sub.c_str(), "PULSA R PARA REINICIAR");
+    } else if (state == GameState::NAME_ENTRY) {
+        std::string sub = "SCORE  " + std::to_string(score);
+        m_overlay.drawNameEntry(renderer.sdlRenderer(),
+                                "NUEVO RECORD", sub.c_str(), m_nameEntry, m_nameCursor);
     }
 
+    // Banner de new high score durante el juego
+    if (m_highScoreBannerT > 0.f && state == GameState::PLAYING)
+        drawHighScoreBanner();
+
     renderer.present();
+}
+
+/* Actualiza el título de la ventana con puntuación, vidas y modo actual. */
+void Game::updateHUD() {
+    const char* mode = (renderMode == RenderMode::HD) ? "HD" : "LOW_POLY";
+    renderer.setWindowTitle(
+        "Asteroids 3D  |  Score: " + std::to_string(score) +
+        "  |  Lives: "             + std::to_string(lives) +
+        "  |  Mode: "              + std::string(mode) +
+        "  |  [WASD/Arrows] move  [F] fire  [T] toggle HD"
+    );
 }
 
 /* Reinicia el estado completo del juego manteniendo la sesión activa. */
@@ -289,4 +341,86 @@ void Game::restart() {
     bullets.clear();
     ship.respawn();
     for (int i = 0; i < m_config.params().baseAsteroidCount; i++) spawnAsteroid();
+}
+
+/* Transiciona a GAME_OVER o NAME_ENTRY según si el score entra en el ranking. */
+void Game::enterGameOver() {
+    if (m_ranking.isHighScore(score)) {
+        state          = GameState::NAME_ENTRY;
+        m_nameCursor   = 0;
+        m_nameEntry[0] = m_nameEntry[1] = m_nameEntry[2] = 'A';
+        m_audio.playSFX("../assets/sounds/new_high_score.wav");
+    } else {
+        state = GameState::GAME_OVER;
+        m_audio.playSFX("../assets/sounds/explosion.ogg");
+    }
+    renderer.setWindowTitle("GAME OVER | Score: " + std::to_string(score));
+}
+
+/* Procesa eventos de teclado durante la entrada de nombre. */
+void Game::handleNameEntryEvent(const SDL_Event& e) {
+    if (e.type != SDL_KEYDOWN) return;
+    switch (e.key.keysym.sym) {
+        case SDLK_UP:
+            m_nameEntry[m_nameCursor] =
+                (m_nameEntry[m_nameCursor] == 'A') ? 'Z'
+                : (char)(m_nameEntry[m_nameCursor] - 1);
+            break;
+        case SDLK_DOWN:
+            m_nameEntry[m_nameCursor] =
+                (m_nameEntry[m_nameCursor] == 'Z') ? 'A'
+                : (char)(m_nameEntry[m_nameCursor] + 1);
+            break;
+        case SDLK_LEFT:
+            if (m_nameCursor > 0) m_nameCursor--;
+            break;
+        case SDLK_RIGHT:
+            if (m_nameCursor < 2) m_nameCursor++;
+            break;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER:
+            submitScore();
+            break;
+        case SDLK_ESCAPE:
+            // Cancelar entrada — guardar con nombre por defecto
+            m_nameEntry[0] = m_nameEntry[1] = m_nameEntry[2] = '?';
+            submitScore();
+            break;
+    }
+}
+
+/* Guarda el score, muestra el ranking y transiciona a GAME_OVER. */
+void Game::submitScore() {
+    m_ranking.insertScore(m_nameEntry, score);
+
+    // Mostrar pantalla de ranking inmediatamente después de confirmar
+    RankingScreen rs(renderer, m_ranking, nullptr, score);
+    rs.run();
+
+    state = GameState::GAME_OVER;
+}
+
+/* Dibuja el banner de nuevo high score con fade-out en los últimos segundos. */
+void Game::drawHighScoreBanner() {
+    SDL_Renderer* rend  = renderer.sdlRenderer();
+    const float   total = 4.0f;
+    // Fade out en el último segundo
+    float alpha = (m_highScoreBannerT < 1.0f) ? m_highScoreBannerT : 1.0f;
+    Uint8 a = (Uint8)(alpha * 255);
+
+    SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
+
+    // Fondo del banner
+    SDL_Rect bg{ renderer.width()/2 - 200, 20, 400, 36 };
+    SDL_SetRenderDrawColor(rend, 0, 30, 60, (Uint8)(alpha * 180));
+    SDL_RenderFillRect(rend, &bg);
+    SDL_SetRenderDrawColor(rend, 0, 200, 255, a);
+    SDL_RenderDrawRect(rend, &bg);
+
+    // Texto parpadeante
+    bool blink = (SDL_GetTicks() / 200) % 2 == 0;
+    if (blink || m_highScoreBannerT > 2.0f)
+        BitmapFont::drawTextCentered(rend, "NUEVO RECORD",
+                                     renderer.width()/2, 28, 2,
+                                     {0, (Uint8)(200 * alpha), (Uint8)(255 * alpha), a});
 }
