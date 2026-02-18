@@ -2,6 +2,7 @@
  * Game.hpp
  * Coordinador principal del juego. Gestiona el loop, eventos, actualización,
  * colisiones y renderizado. El spawning se delega a Spawner y el boost a HyperspaceSystem.
+ * Boost incentivado, si lo usas ganas más puntos, pero más difícil sobrevivir.
  */
 #pragma once
 #include <vector>
@@ -58,7 +59,6 @@ private:
     void checkCollisions();
     void spawnAsteroid();
     void render();
-    void updateHUD();
     void restart();
     void spawnWave();
 

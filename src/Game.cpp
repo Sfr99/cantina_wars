@@ -151,8 +151,9 @@ void Game::update(float dt) {
         spawnTimer = (0.28f / difficulty) + (rand() / (float)RAND_MAX) * 0.12f;
     }
 
+    // puntuación en función de la velocidad hacia adelante (más puntos cuanto más rápido vas, incentivando el boost)
     score += (int)(ship.vel.z * dt * 0.5f);
-    updateHUD();
+    printf("Score: %d\r", score);
 }
 
 bool Game::sphereCollide(Vec3 a, float ra, Vec3 b, float rb) {
@@ -268,17 +269,6 @@ void Game::render() {
     }
 
     renderer.present();
-}
-
-/* Actualiza el título de la ventana con puntuación, vidas y modo actual. */
-void Game::updateHUD() {
-    const char* mode = (renderMode == RenderMode::HD) ? "HD" : "LOW_POLY";
-    renderer.setWindowTitle(
-        "Asteroids 3D  |  Score: " + std::to_string(score) +
-        "  |  Lives: "             + std::to_string(lives) +
-        "  |  Mode: "              + std::string(mode) +
-        "  |  [WASD/Arrows] move  [F] fire  [T] toggle HD"
-    );
 }
 
 /* Reinicia el estado completo del juego manteniendo la sesión activa. */
