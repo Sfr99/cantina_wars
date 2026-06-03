@@ -2,7 +2,7 @@
 
 Un juego de naves en 3D donde pilotas una nave para destruir asteroides, construido sobre un **renderizador 3D por software propio**: SDL2 solo se usa para abrir la ventana y volcar píxeles, mientras que toda la proyección en perspectiva, las transformaciones y el dibujado de geometría están implementados a mano, sin GPU ni OpenGL.
 
-Escrito principalmente en C (con algo de C++) y compilado con CMake.
+Escrito principalmente en C++ y compilado con CMake.
 
 ## Características
 
