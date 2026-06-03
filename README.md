@@ -1,8 +1,14 @@
 # Cantina Wars
 
+<p align="center">
+  <img src="assets/cantina_wars.gif" width="600" alt="Demo de Cantina Wars">
+</p>
+
 Un juego de naves en 3D donde pilotas una nave para destruir asteroides, construido sobre un **renderizador 3D por software propio**: SDL2 solo se usa para abrir la ventana y volcar píxeles, mientras que toda la proyección en perspectiva, las transformaciones y el dibujado de geometría están implementados a mano, sin GPU ni OpenGL.
 
-Escrito principalmente en C++ y compilado con CMake.
+Escrito en C++ y compilado con CMake.
+
+> **Nota sobre los recursos:** la versión original del juego usaba modelos, texturas y sonidos que no se incluyen en este repositorio por motivos de derechos de autor. Por ello, el código publicado aquí no reproduce la experiencia completa del juego tal y como se concibió: faltan los assets gráficos y de audio. El propósito de este repositorio es mostrar el motor y el código, no distribuir el juego jugable al completo.
 
 ## Características
 
@@ -10,14 +16,14 @@ Escrito principalmente en C++ y compilado con CMake.
 - **Cámara dinámica** que sigue a la nave desde detrás y arriba para mantener la acción siempre a la vista.
 - **Geometría procedural** - la nave, las balas y los asteroides se generan como mallas a partir de sus vértices y aristas en código.
 - **Mecánica de juego** - control de la nave, disparo de proyectiles con tiempo de vida, asteroides como objetivos y detección de colisiones.
-- **Sistema de música** y efectos de sonido integrados.
+- **Sistema de música** y efectos de sonido (los archivos de audio originales no se incluyen).
 - **Marcador de puntuaciones** persistente (`scores.txt`).
 
 ## Estructura del proyecto
 
 ```
 cantina_wars/
-├── assets/         # modelos (glTF), texturas y sonidos
+├── assets/         # solo la demo en GIF (los recursos del juego no se incluyen)
 ├── include/SDL2/   # cabeceras de SDL2
 ├── lib/            # librerías de SDL2
 ├── scripts/        # scripts auxiliares
@@ -28,7 +34,7 @@ cantina_wars/
 
 ## Compilación
 
-Requiere CMake y un compilador de C/C++. SDL2 viene incluido en el repositorio (`include/` y `lib/`).
+Requiere CMake y un compilador de C++. SDL2 viene incluido en el repositorio (`include/` y `lib/`).
 
 ```bash
 mkdir build && cd build
